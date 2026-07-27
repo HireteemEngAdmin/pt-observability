@@ -1,0 +1,10 @@
+# $SLACK_WEBHOOK_URL vem do environment do container (docker-compose <- .env).
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: slack-pt-alerts
+    receivers:
+      - uid: slack-pt-alerts
+        type: slack
+        settings:
+          url: $SLACK_WEBHOOK_URL

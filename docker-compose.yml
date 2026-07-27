@@ -1,0 +1,52 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=180d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    restart: unless-stopped
+    environment:
+      - GRAFANA_DOMAIN=${GRAFANA_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+# Nomes fixos (sem prefixo do projeto) para os scripts de backup/restore
+# funcionarem igual em qualquer host.
+volumes:
+  prom-data:
+    name: pt-obs-prom-data
+  grafana-data:
+    name: pt-obs-grafana-data
+  caddy-data:
+    name: pt-obs-caddy-data

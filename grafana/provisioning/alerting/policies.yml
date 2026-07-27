@@ -1,0 +1,5 @@
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: slack-pt-alerts
+    group_by: ['alertname']
