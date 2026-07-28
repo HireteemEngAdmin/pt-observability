@@ -29,8 +29,9 @@ def nid():
     return pid
 
 
-def targets(*exprs):
-    return [{"datasource": DS, "expr": e, "refId": chr(65 + i), "queryType": "range",
+def targets(*exprs, instant=False):
+    return [{"datasource": DS, "expr": e, "refId": chr(65 + i),
+             "queryType": "instant" if instant else "range",
              "editorMode": "code"}
             for i, e in enumerate(exprs)]
 
@@ -78,23 +79,52 @@ panels.append(ts(
          "logging through console.*."))
 y += 8
 panels.append({
-    "type": "barchart", "title": "Top failing modules", "id": nid(),
+    "type": "bargauge", "title": "Top failing modules", "id": nid(),
     "description": "Errors grouped by their [module] prefix over the dashboard's time range. "
                    "Not exception fingerprinting — but it answers what is failing most, "
-                   "which is what you usually open a log dashboard to find out.",
-    "gridPos": {"h": 9, "w": 24, "x": 0, "y": y}, "datasource": DS,
+                   "which is what you usually open a log dashboard to find out. "
+                   "\"(no prefix)\" collects the stderr lines that carry no [module] tag.",
+    "gridPos": {"h": 12, "w": 24, "x": 0, "y": y}, "datasource": DS,
+    # instant, not range. A range query evaluates the topk at every step, so the
+    # panel receives 10 series times ~45 steps and renders 450 unreadable slivers
+    # instead of 10 bars. Top-N over a window is a single evaluation.
+    #
+    # label_replace names the bucket of lines that matched no [module] prefix;
+    # without it that bar arrives with an empty label.
     "targets": targets(
-        'topk(15, sum by (module) (count_over_time({job=~"$job", stream="err"} '
-        '|= "$search" ' + MODULE_RE + ' [$__range])))'),
-    "options": {"orientation": "horizontal", "showValue": "always",
-                "legend": {"showLegend": False},
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}},
-    "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "palette-classic"}},
-                    "overrides": []},
+        'label_replace('
+        'topk(10, sum by (module) (count_over_time({job=~"$job", stream="err"} '
+        '|= "$search" ' + MODULE_RE + ' [$__range])))'
+        ', "module", "(no prefix)", "module", "^$")',
+        instant=True),
+    # Loki answers with one frame per series, and the numeric field is called
+    # "Value" in every one of them — the module name exists only in the field
+    # labels. The panel cannot read labels on its own: it collapses the frames
+    # and draws a single bar named "Value #A".
+    #
+    # labelsToFields promotes the label to a real field, merge folds the ten
+    # frames into one table, and values:true then draws a bar per row using the
+    # module column as the name. A displayName template does not work here —
+    # ${__field.labels.module} is resolved before the frames are merged.
+    "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {"id": "merge", "options": {}},
+        {"id": "sortBy", "options": {"sort": [{"field": "Value #A", "desc": True}]}},
+        {"id": "organize", "options": {"excludeByName": {"Time": True}}},
+    ],
+    "options": {"orientation": "horizontal", "displayMode": "gradient",
+                "showUnfilled": True, "valueMode": "text", "minVizWidth": 8,
+                "minVizHeight": 16, "namePlacement": "left", "sizing": "auto",
+                "reduceOptions": {"calcs": [], "fields": "", "values": True}},
+    "fieldConfig": {"defaults": {
+        "unit": "short", "min": 0,
+        "color": {"mode": "continuous-BlPu"},
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}]},
+    }, "overrides": []},
 })
 
 # ── Logs ─────────────────────────────────────────────────────────
-y += 9
+y += 12
 panels.append(row("Logs", y))
 y += 1
 panels.append({

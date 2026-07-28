@@ -155,12 +155,12 @@
       }
     },
     {
-      "type": "barchart",
+      "type": "bargauge",
       "title": "Top failing modules",
       "id": 4,
-      "description": "Errors grouped by their [module] prefix over the dashboard's time range. Not exception fingerprinting \u2014 but it answers what is failing most, which is what you usually open a log dashboard to find out.",
+      "description": "Errors grouped by their [module] prefix over the dashboard's time range. Not exception fingerprinting \u2014 but it answers what is failing most, which is what you usually open a log dashboard to find out. \"(no prefix)\" collects the stderr lines that carry no [module] tag.",
       "gridPos": {
-        "h": 9,
+        "h": 12,
         "w": 24,
         "x": 0,
         "y": 9
@@ -175,31 +175,71 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "topk(15, sum by (module) (count_over_time({job=~\"$job\", stream=\"err\"} |= \"$search\" | regexp `^\\[(?P<module>[^\\]]+)\\]` [$__range])))",
+          "expr": "label_replace(topk(10, sum by (module) (count_over_time({job=~\"$job\", stream=\"err\"} |= \"$search\" | regexp `^\\[(?P<module>[^\\]]+)\\]` [$__range]))), \"module\", \"(no prefix)\", \"module\", \"^$\")",
           "refId": "A",
-          "queryType": "range",
+          "queryType": "instant",
           "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
         }
       ],
       "options": {
         "orientation": "horizontal",
-        "showValue": "always",
-        "legend": {
-          "showLegend": false
-        },
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "left",
+        "sizing": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": [],
           "fields": "",
-          "values": false
+          "values": true
         }
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "min": 0,
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           }
         },
         "overrides": []
@@ -212,7 +252,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 21
       },
       "id": 5,
       "collapsed": false,
@@ -227,7 +267,7 @@
         "h": 18,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 22
       },
       "datasource": {
         "type": "loki",
