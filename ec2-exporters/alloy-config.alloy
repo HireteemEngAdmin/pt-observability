@@ -1,16 +1,26 @@
 // Logs do PM2 -> Loki. Roda na EC2 da aplicacao, so conexao de saida.
 //
-// O glob exclui *__*.log de proposito: o pm2-logrotate gera
-// cron-out__2026-07-27_17-00-42.log a cada rotacao, e sem a exclusao o Alloy
-// trata cada rotacao como arquivo novo e reingere o conteudo inteiro.
-// Por isso os caminhos sao listados um a um, sem curinga.
+// Duas regras moldam estes globs:
+//
+// 1. O `server` roda em cluster com 2 instancias (ecosystem.config.js), e nesse
+//    modo o PM2 sufixa o id da instancia: server-out-8.log, server-out-9.log.
+//    Apontar para server-out.log le um arquivo morto de antes do cluster — foi
+//    o que aconteceu na primeira tentativa, e os logs da API nao chegavam.
+//    O id vem do contador interno do PM2 e muda quando processos sao
+//    recriados, entao o curinga e obrigatorio; nao fixar 8 e 9.
+//
+// 2. __path_exclude__ tira os rotacionados: o pm2-logrotate gera
+//    server-out-8__2026-07-28_00-00-00.log a cada rotacao, e sem a exclusao o
+//    Alloy trata cada um como arquivo novo e reingere o conteudo inteiro.
+//
+// postgres-mcp-*.log fica de fora por nao ser da aplicacao.
 
 local.file_match "pm2" {
   path_targets = [
-    { __path__ = "/home/ec2-user/.pm2/logs/server-out.log",   job = "server", stream = "out", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/server-error.log", job = "server", stream = "err", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/cron-out.log",     job = "cron",   stream = "out", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/cron-error.log",   job = "cron",   stream = "err", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/server-out*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "out", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/server-error*.log", __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "err", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-out*.log",     __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "out", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-error*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "err", host = constants.hostname },
   ]
 }
 
