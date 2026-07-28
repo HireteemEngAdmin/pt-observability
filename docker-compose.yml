@@ -40,6 +40,12 @@ services:
       # Future phase (alerting): uncomment together with the .example files in
       # provisioning/alerting/.
       # - TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL}
+    # The Postgres datasource's password reaches provisioning through this file
+    # rather than through .env, for the same reason the Caddy credential does:
+    # it stays in secrets/, which is gitignored. Unlike the Caddy bcrypt hash it
+    # contains no `$`, so it needs no doubling.
+    env_file:
+      - ./secrets/grafana-postgres.env
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

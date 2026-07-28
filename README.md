@@ -264,3 +264,100 @@ parser:
 `stack` (unexpected errors only), `rate_limited`, `retry_after_seconds`,
 `outcome`. Emails are replaced with `[email]` and credential-shaped values with
 `[redacted]` before anything is written.
+
+## PostgreSQL datasource (product dashboards)
+
+The product dashboards read user and company activity that Prometheus must not
+hold: a per-user or per-company label would be unbounded cardinality. Those
+panels query PostgreSQL directly.
+
+The database is RDS in a private subnet, so it has no route from the internet
+and a security group rule alone cannot reach it. Rather than make a production
+database publicly accessible, Grafana reaches it through an SSH tunnel to the
+application host. That host's SSH port is already reachable from here, so this
+needs no security group change and records this host's address nowhere in AWS.
+
+### 1. The read-only role
+
+Run `sql/grafana-readonly-role.sql` against the database with an account that
+holds CREATE ROLE. The application's own user does not: `rolcreaterole` is false
+for it, so it cannot create this role.
+
+The role may connect and `SELECT` on four tables and nothing else. That grant is
+the only containment there is: a Grafana Postgres datasource executes arbitrary
+SQL as whatever role it is given, so a panel cannot be trusted to restrain
+itself. Adding a panel that needs another table means adding a GRANT, which is
+the review point.
+
+### 2. The tunnel key
+
+On this host, generate a key used for nothing else:
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "grafana-pg-tunnel" -f /root/.ssh/pg_tunnel
+```
+
+On the application host, authorise it restricted to this one forward. The
+`port-forwarding` flag is required: `restrict` alone disables forwarding, and
+`permitopen` only narrows the destinations rather than re-enabling the
+capability.
+
+```bash
+printf 'restrict,port-forwarding,permitopen="<RDS_HOST>:5432",command="/bin/false" %s\n' \
+  "$(cat /root/.ssh/pg_tunnel.pub)" >> ~/.ssh/authorized_keys
+```
+
+With `command="/bin/false"` the key opens no shell, and with `permitopen` it
+forwards to the database endpoint only.
+
+Confirm it works before going further. `ExitOnForwardFailure` turns a refused
+forward into a non-zero exit rather than a tunnel that looks up but carries
+nothing:
+
+```bash
+ssh -i /root/.ssh/pg_tunnel -o ExitOnForwardFailure=yes \
+  -L 15432:<RDS_HOST>:5432 ec2-user@<APP_HOST> sleep 3; echo "exit=$?"
+```
+
+### 3. The service
+
+```bash
+sudo install -m 644 systemd/grafana-pg-tunnel.service /etc/systemd/system/
+printf 'DB_HOST=<RDS_HOST>\nAPP_HOST=<APP_HOST>\nGRAFANA_PG_PASSWORD=<ROLE_PASSWORD>\n' \
+  > secrets/grafana-postgres.env
+chmod 600 secrets/grafana-postgres.env
+sudo systemctl daemon-reload && sudo systemctl enable --now grafana-pg-tunnel
+```
+
+The unit binds the forward on `172.17.0.1`, the docker bridge gateway, because
+Grafana runs in a container and cannot reach the host's loopback.
+
+`secrets/grafana-postgres.env` is read by both the unit and Compose. It holds no
+`$`, so unlike `secrets/caddy.env` it needs no doubling.
+
+### 4. Bring Grafana up with the datasource
+
+```bash
+docker compose up -d --force-recreate grafana
+docker compose exec grafana wget -qO- http://localhost:3000/api/health
+```
+
+`up -d` alone does not recreate a running container, so provisioning would not
+be re-read and the datasource would not appear.
+
+### Verifying
+
+```bash
+sudo systemctl is-active grafana-pg-tunnel
+docker compose exec grafana sh -c 'nc -z 172.17.0.1 5432 && echo reachable'
+```
+
+Then in Grafana, Connections, Data sources, PostgreSQL, Save and test.
+
+### What this exposes
+
+Anyone who can sign in to Grafana can run read-only SQL against production
+within those four tables, and two of the product panels show names and email
+addresses. Grafana does not restrict access per panel, only per dashboard, which
+is why the identifiable data lives in its own dashboard: restrict that one
+separately.

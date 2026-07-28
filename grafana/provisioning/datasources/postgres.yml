@@ -1,0 +1,31 @@
+# Reaches the application database through the SSH tunnel held open by
+# systemd/grafana-pg-tunnel.service, not directly: the database is RDS in a
+# private subnet. 172.17.0.1 is the docker bridge gateway, which is where the
+# tunnel binds so a container can see it.
+#
+# The role is read-only and granted SELECT on four tables only. That grant is
+# the only containment there is, because a Postgres datasource runs arbitrary
+# SQL as whatever role it holds. See sql/grafana-readonly-role.sql.
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    uid: postgres
+    access: proxy
+    url: 172.17.0.1:5432
+    user: grafana_ro
+    jsonData:
+      database: performance_tracker
+      sslmode: require
+      postgresVersion: 1700
+      timescaledb: false
+      # The product dashboards query a 309 MB table. Capping the pool keeps a
+      # dashboard left open on a wall display from holding connections the
+      # application needs.
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${GRAFANA_PG_PASSWORD}
+    editable: false
