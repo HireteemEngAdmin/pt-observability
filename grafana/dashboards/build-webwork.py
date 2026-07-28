@@ -316,7 +316,7 @@ panels.append(ts(
 y += 8
 panels.append(logs(
     "Rate limit events",
-    '{module="webwork"} | json | rate_limited = `true`', 0, y, h=10,
+    '{job=~"$job"} | json | module = `webwork` | rate_limited = `true`', 0, y, h=10,
     desc="pino lines where rate_limited is true, carrying the endpoint, the Retry-After value "
          "and the correlation id."))
 
@@ -348,9 +348,8 @@ panels.append(ts(
 y += 8
 panels.append(logs(
     "WebWork logs",
-    '{module="webwork"} | json | outcome =~ `error|failure`', 0, y, h=12,
-    desc="Every WebWork log line carries module=\"webwork\", so this selector is the entry point "
-         "for any investigation. Drop the outcome filter to see successes too."))
+    '{job=~"$job"} | json | module = `webwork` | outcome =~ `error|failure`', 0, y, h=12,
+    desc="module is a field inside the pino JSON, not a Loki stream label — the labels are job, stream, host and filename — so it has to be matched after | json, never as {module=\"webwork\"}, which silently returns nothing. Drop the outcome filter to see successes too."))
 
 # ── Jobs ─────────────────────────────────────────────────────────
 y += 12
@@ -389,7 +388,7 @@ panels.append(ts(
          "the 60/min ceiling."))
 y += 8
 panels.append(logs(
-    "Job logs", '{module="webwork"} | json | job != ``', 0, y, h=10,
+    "Job logs", '{job=~"$job"} | json | module = `webwork` | job_execution_id != ``', 0, y, h=10,
     desc="Start, completion and failure lines for the reconcile job, with duration, record "
          "counts and the JobExecution id."))
 
