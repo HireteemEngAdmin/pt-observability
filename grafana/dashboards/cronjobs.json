@@ -1160,7 +1160,7 @@
     {
       "type": "timeseries",
       "title": "Concurrent runs",
-      "description": "Two gauges for what looks like one number. cronjob_concurrent_runs is the per-process total; cronjob_running carries the instance, so a job running on two instances at once is visible instead of being averaged away. Note exported_instance: the app's own `instance` label collides with the target label Prometheus attaches, and with honor_labels off the scraped one is renamed. Querying instance=\"0\" here returns nothing at all, silently. Drawn as steps because a gauge holds its value between scrapes rather than sloping between them.",
+      "description": "Two gauges for what looks like one number. cronjob_concurrent_runs is the per-process total; cronjob_running carries the instance, so a job running on two instances at once is visible instead of being averaged away. Note instance_id: the app's own `instance` label collides with the target label Prometheus attaches, and with honor_labels off the scraped one is renamed. Querying instance=\"0\" here returns nothing at all, silently. Drawn as steps because a gauge holds its value between scrapes rather than sloping between them.",
       "id": 13,
       "gridPos": {
         "h": 8,
@@ -1190,12 +1190,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (job_name, exported_instance) (cronjob_running{environment=~\"$environment\", job_name=~\"$job\", exported_instance=~\"$instance\"})",
+          "expr": "sum by (job_name, instance_id) (cronjob_running{environment=~\"$environment\", job_name=~\"$job\", instance_id=~\"$instance\"})",
           "refId": "B",
           "editorMode": "code",
           "range": true,
           "instant": false,
-          "legendFormat": "{{job_name}} on instance {{exported_instance}}"
+          "legendFormat": "{{job_name}} on instance {{instance_id}}"
         }
       ],
       "options": {
@@ -3730,7 +3730,7 @@
           "uid": "prometheus"
         },
         "query": {
-          "query": "label_values(cronjob_running, exported_instance)",
+          "query": "label_values(cronjob_running, instance_id)",
           "refId": "A"
         },
         "multi": true,

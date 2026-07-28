@@ -9,13 +9,15 @@ backend/utils/instrumentCronJob.js, which reach Loki under job="cron".
 Four things this file gets right that are easy to get wrong, all of them
 verified against a Prometheus rather than reasoned about:
 
-1. `instance` arrives as `exported_instance`. cronjob_running declares a label
-   called `instance`, which collides with the target label Prometheus attaches
-   at scrape time. prometheus.yml sets no honor_labels, so the default applies
-   and the scraped label is renamed with an `exported_` prefix. Querying
-   `cronjob_running{instance="0"}` matches nothing, silently. Confirmed by
-   scraping this exact exposition into a throwaway Prometheus: the stored series
-   is `cronjob_running{exported_instance="0", instance="host:9464", job="cron"}`.
+1. The application instance is `instance_id`, not `instance`. Prometheus
+   attaches its own `instance` label at scrape time, naming the target, so a
+   metric declaring that same name collides with it: with no honor_labels in
+   prometheus.yml the default applies and the scraped label is renamed with an
+   `exported_` prefix, which a query then misses in silence. cronMetrics.js
+   therefore names it `instance_id`, and the stored series carries both:
+   `cronjob_running{instance_id="0", instance="host:9464", job="cron"}`.
+   The first version of this dashboard queried `exported_instance`, from before
+   the metric was renamed.
 
 2. `trigger` is not a Prometheus label at all. instrumentCronJob puts it in the
    childLogger bindings, not in any metric's labelNames. So the trigger variable
@@ -46,8 +48,8 @@ LOKI = {"type": "loki", "uid": "loki"}
 SEL = 'environment=~"$environment", job_name=~"$job"'
 SEL_STATUS = SEL + ', status=~"$status"'
 SEL_ERR = SEL + ', error_type=~"$errortype"'
-# See note 1 in the module docstring. This is exported_instance, not instance.
-SEL_INST = SEL + ', exported_instance=~"$instance"'
+# See note 1 in the module docstring. This is instance_id, not instance.
+SEL_INST = SEL + ', instance_id=~"$instance"'
 
 # Loki panels pin job="cron" (note 3) and read the pino fields, not labels.
 # `| json | __error__=""` drops anything on the stream that is not our
@@ -489,12 +491,12 @@ panels.append(ranked(
 panels.append(ts(
     "Concurrent runs",
     [f'sum by (job_name) (cronjob_concurrent_runs{{{SEL}}})',
-     f'sum by (job_name, exported_instance) (cronjob_running{{{SEL_INST}}})'],
-    ["{{job_name}} (process)", "{{job_name}} on instance {{exported_instance}}"],
+     f'sum by (job_name, instance_id) (cronjob_running{{{SEL_INST}}})'],
+    ["{{job_name}} (process)", "{{job_name}} on instance {{instance_id}}"],
     12, y, style="stepAfter", fill=10,
     desc="Two gauges for what looks like one number. cronjob_concurrent_runs is the "
          "per-process total; cronjob_running carries the instance, so a job running on two "
-         "instances at once is visible instead of being averaged away. Note exported_instance: "
+         "instances at once is visible instead of being averaged away. Note instance_id: "
          "the app's own `instance` label collides with the target label Prometheus attaches, "
          "and with honor_labels off the scraped one is renamed. Querying instance=\"0\" here "
          "returns nothing at all, silently. Drawn as steps because a gauge holds its value "
@@ -981,13 +983,13 @@ dashboard = {
             "current": {"text": ["All"], "value": ["$__all"]},
         },
         {
-            # exported_instance. See note 1 in the module docstring: the app's
+            # instance_id. See note 1 in the module docstring: the app's
             # own `instance` label is renamed at scrape time, and enumerating
             # `instance` here would list the scrape target address instead of
             # the PM2 instance id. In Loki the same value is the instanceId
             # field, which is why the log panels match on that.
             "name": "instance", "label": "Instance", "type": "query", "datasource": PROM,
-            "query": {"query": "label_values(cronjob_running, exported_instance)", "refId": "A"},
+            "query": {"query": "label_values(cronjob_running, instance_id)", "refId": "A"},
             "multi": True, "includeAll": True, "allValue": ".*",
             "current": {"text": ["All"], "value": ["$__all"]}, "refresh": 1,
         },
