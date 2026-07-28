@@ -14,7 +14,7 @@ Wants=network-online.target
 
 [Service]
 User=root
-EnvironmentFile=/opt/pt-observability/secrets/grafana-postgres.env
+EnvironmentFile=/opt/observability/secrets/grafana-postgres.env
 # Binds on the docker bridge rather than 127.0.0.1, because Grafana runs in a
 # container and cannot reach the host's loopback. ExitOnForwardFailure makes a
 # refused forward a unit failure instead of a silently dead tunnel that Grafana
