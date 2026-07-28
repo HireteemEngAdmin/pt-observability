@@ -32,8 +32,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Error volume over time",
-      "description": "Everything on stderr. This is the panel that answers \"did something start failing at 3am\" \u2014 the log list alone cannot show that.",
+      "title": "Errors and warnings over time",
+      "description": "Read from the level field, not from which stream the line arrived on. This is the panel that answers \"did something start failing at 3am\", which the log list alone cannot show.",
       "id": 2,
       "gridPos": {
         "h": 8,
@@ -51,7 +51,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (job) (count_over_time({job=~\"$job\", stream=\"err\"} |= \"$search\" [$__interval]))",
+          "expr": "sum by (level) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" | level=~\"error|warn\" [$__interval]))",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -94,8 +94,8 @@
     },
     {
       "type": "timeseries",
-      "title": "stdout lines matching error/warn",
-      "description": "pino writes every level to stdout, so logger.error lands here rather than on stderr. Matching on text is the only way to find it until the backend stops logging through console.*.",
+      "title": "Unstructured lines",
+      "description": "Lines that did not come from the logger. This is the migration tracker: the backend is at zero console.* calls, so this should stay flat at whatever Node itself emits. Two known sources are legitimate, both at boot: Node's own warnings, and the console output inside migrations/, which run in the deployed process and are deliberately outside the console ban. A sustained rise here during normal traffic means something went back to writing raw.",
       "id": 3,
       "gridPos": {
         "h": 8,
@@ -113,7 +113,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (job) (count_over_time({job=~\"$job\", stream=\"out\"} |= \"$search\" |~ \"(?i)(error|warn)\" [$__interval]))",
+          "expr": "sum by (stream) (count_over_time({job=~\"$job\"} != `\"service\":\"performance-tracker\"` [$__interval]))",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -158,7 +158,7 @@
       "type": "bargauge",
       "title": "Top failing modules",
       "id": 4,
-      "description": "Errors grouped by their [module] prefix over the dashboard's time range. Not exception fingerprinting \u2014 but it answers what is failing most, which is what you usually open a log dashboard to find out. \"(no prefix)\" collects the stderr lines that carry no [module] tag.",
+      "description": "Errors grouped by the logger's module field over the dashboard's time range. Not exception fingerprinting, but it answers what is failing most, which is what you usually open a log dashboard to find out. A line with no module means the logger was used without a binding.",
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -175,7 +175,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "label_replace(topk(10, sum by (module) (count_over_time({job=~\"$job\", stream=\"err\"} |= \"$search\" | regexp `^\\[(?P<module>[^\\]]+)\\]` [$__range]))), \"module\", \"(no prefix)\", \"module\", \"^$\")",
+          "expr": "label_replace(topk(10, sum by (module) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" | level=\"error\" [$__range]))), \"module\", \"(no module)\", \"module\", \"^$\")",
           "refId": "A",
           "queryType": "instant",
           "editorMode": "code"
@@ -279,7 +279,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\", stream=~\"$stream\"} |= \"$search\"",
+          "expr": "{job=~\"$job\", stream=~\"$stream\"} |= \"$search\" | json | level=~\"$level\" or __error__=\"JSONParserErr\"",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -332,7 +332,7 @@
           {
             "text": "err",
             "value": "err",
-            "selected": true
+            "selected": false
           },
           {
             "text": "out",
@@ -342,10 +342,51 @@
         ],
         "current": {
           "text": [
-            "err"
+            "All"
           ],
           "value": [
-            "err"
+            "$__all"
+          ]
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "level",
+        "label": "Level",
+        "type": "custom",
+        "query": "error,warn,info,debug",
+        "options": [
+          {
+            "text": "error",
+            "value": "error",
+            "selected": true
+          },
+          {
+            "text": "warn",
+            "value": "warn",
+            "selected": true
+          },
+          {
+            "text": "info",
+            "value": "info",
+            "selected": false
+          },
+          {
+            "text": "debug",
+            "value": "debug",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": [
+            "error",
+            "warn"
+          ],
+          "value": [
+            "error",
+            "warn"
           ]
         },
         "multi": true,
