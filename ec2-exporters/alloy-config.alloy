@@ -1,0 +1,49 @@
+// Logs do PM2 -> Loki. Roda na EC2 da aplicacao, so conexao de saida.
+//
+// O glob exclui *__*.log de proposito: o pm2-logrotate gera
+// cron-out__2026-07-27_17-00-42.log a cada rotacao, e sem a exclusao o Alloy
+// trata cada rotacao como arquivo novo e reingere o conteudo inteiro.
+// Por isso os caminhos sao listados um a um, sem curinga.
+
+local.file_match "pm2" {
+  path_targets = [
+    { __path__ = "/home/ec2-user/.pm2/logs/server-out.log",   job = "server", stream = "out", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/server-error.log", job = "server", stream = "err", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-out.log",     job = "cron",   stream = "out", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-error.log",   job = "cron",   stream = "err", host = constants.hostname },
+  ]
+}
+
+loki.source.file "pm2" {
+  targets    = local.file_match.pm2.targets
+  forward_to = [loki.process.pm2.receiver]
+}
+
+loki.process "pm2" {
+  // Junta dumps de objeto multi-linha na entrada anterior.
+  //
+  // firstline casa "linha que NAO comeca com espaco nem com }":
+  //   [hubspot] POST ... responded 429   -> nova entrada
+  //   {"level":50,"msg":"..."}           -> nova entrada (pino, sempre 1 linha)
+  //     stripeCustomerId: 'cus_...',     -> continuacao (indentada)
+  //   }                                  -> continuacao (fecha o objeto)
+  //
+  // Escrito como classe negada para nao precisar escapar aspas no regex.
+  stage.multiline {
+    firstline     = "^[^ }]"
+    max_wait_time = "3s"
+    max_lines     = 200
+  }
+
+  forward_to = [loki.write.central.receiver]
+}
+
+loki.write "central" {
+  endpoint {
+    url = "https://teem.wagnerjunior.dev/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("LOKI_PUSH_USER")
+      password = sys.env("LOKI_PUSH_PASSWORD")
+    }
+  }
+}
