@@ -198,3 +198,61 @@ a security group rule. Logs are push-based, which adds step 5.
    are up, the Grafana login works, and logs are arriving (`{job="cron"}` in
    Explore).
 7. `docker compose down` on the old host.
+
+## WebWork integration metrics
+
+Emitted by `backend/utils/webworkMetrics.js` in the `performance-tracker` repo,
+on the same registry the API and cron already expose at `/metrics`. Every call
+the WebWork client makes passes through one wrapper, so metrics and logs cannot
+drift from the traffic.
+
+| Metric | Type | Labels | What it answers |
+|---|---|---|---|
+| `webwork_requests_total` | counter | `endpoint`, `method`, `status` | total, per endpoint, per method, per status; rate() gives per-minute and per-hour |
+| `webwork_request_duration_seconds` | histogram | `endpoint`, `method` | mean and p50/p90/p95/p99, slowest endpoints |
+| `webwork_requests_in_flight` | gauge | — | calls started and not yet settled |
+| `webwork_waiting_seconds_total` | counter | — | cumulative time awaiting WebWork |
+| `webwork_errors_total` | counter | `endpoint`, `method`, `error_type` | `http_4xx`, `http_5xx`, `rate_limited`, `timeout`, `connection`, `unexpected` |
+| `webwork_rate_limited_total` | counter | `endpoint` | HTTP 429 count, and which endpoint absorbs them |
+| `webwork_retry_after_seconds` | histogram | `endpoint` | the Retry-After value WebWork advertises |
+| `webwork_operation_attempts` | histogram | `endpoint`, `outcome` | attempts an operation took before settling |
+| `webwork_up` | gauge | — | 1 after a success, 0 after a failure |
+| `webwork_last_success_timestamp_seconds` | gauge | — | age via `time() - <metric>` |
+| `webwork_last_failure_timestamp_seconds` | gauge | — | supporting metric, not charted |
+| `webwork_consecutive_failures` | gauge | — | failures since the last success |
+| `webwork_consecutive_successes` | gauge | — | successes since the last failure |
+| `webwork_job_runs_total` | counter | `job_name`, `status` | executions by terminal status |
+| `webwork_job_duration_seconds` | histogram | `job_name` | how long a run takes |
+| `webwork_job_running` | gauge | `job_name` | concurrent executions |
+| `webwork_job_last_run_timestamp_seconds` | gauge | `job_name` | when it last started |
+| `webwork_job_last_success_timestamp_seconds` | gauge | `job_name` | when it last succeeded |
+| `webwork_job_records_total` | counter | `job_name`, `outcome` | `processed` / `succeeded` / `failed` |
+| `webwork_job_api_calls` | histogram | `job_name` | WebWork calls one run generates |
+
+Three properties worth knowing before writing queries against these:
+
+**Cardinality is capped by construction.** `endpoint` is normalized against a
+closed set (`/members/:id` and friends) and anything unrecognised becomes
+`other`, so a new call site cannot grow the series count. No company slug, user
+id, workspace id or raw URL is ever a label. The per-company view stays at
+`/api/super-admin/webwork-health`, which this did not touch.
+
+**The job label is `job_name`, not `job`.** Prometheus attaches its own `job`
+from the scrape config (`api` / `cron`); a metric carrying that name gets
+renamed to `exported_job` on ingest, which silently breaks every query written
+against it.
+
+**Availability is event-driven and per-process.** `webwork_up` and the
+consecutive counters only move when a call actually happens, so a quiet night
+holds the last known state instead of reading as an outage. Each process keeps
+its own, which is why the dashboard uses `min()` for status and `max()` for
+consecutive failures: one instance failing while another succeeds is a real
+distinction, not noise to average away.
+
+Logs reach Loki through Grafana Alloy with `module="webwork"` on every line, so
+`{module="webwork"} | json` is the entry point for any investigation. Fields:
+`endpoint`, `method`, `status_code`, `duration_ms`, `attempt`, `correlation_id`,
+`operation_id`, `job`, `job_execution_id`, `error_type`, `msg_sanitized`,
+`stack` (unexpected errors only), `rate_limited`, `retry_after_seconds`,
+`outcome`. Emails are replaced with `[email]` and credential-shaped values with
+`[redacted]` before anything is written.
