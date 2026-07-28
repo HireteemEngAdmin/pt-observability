@@ -1,10 +1,10 @@
-# FASE FUTURA (alertas, apos aprovacao do manager). Para ativar:
-# 1. Criar o webhook do canal do Teams via Workflows/Power Automate
-#    (os connectors classicos do O365 foram descontinuados pela Microsoft).
-# 2. Adicionar TEAMS_WEBHOOK_URL ao .env e ao environment do grafana
-#    no docker-compose.yml.
-# 3. Renomear este arquivo para contactpoints.yml (e o policies.yml.example
-#    para policies.yml) e rodar: docker compose up -d
+# FUTURE PHASE (alerting, pending manager approval). To enable:
+# 1. Create the Teams channel webhook through Workflows/Power Automate
+#    (Microsoft retired the classic O365 connectors).
+# 2. Add TEAMS_WEBHOOK_URL to .env and to the grafana environment in
+#    docker-compose.yml.
+# 3. Rename this file to contactpoints.yml (and policies.yml.example to
+#    policies.yml), then run: docker compose up -d
 apiVersion: 1
 contactPoints:
   - orgId: 1

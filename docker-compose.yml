@@ -9,9 +9,9 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # Cert autoassinado do node_exporter, pinado como CA no scrape do job node.
+      # node_exporter's self-signed cert, pinned as the CA for the node job.
       - ./prometheus/node_exporter-ca.crt:/etc/prometheus/node_exporter-ca.crt:ro
-      # Senha do basic auth do node_exporter (./secrets nao vai para o git).
+      # node_exporter basic auth password (./secrets never reaches git).
       - ./secrets:/etc/prometheus/secrets:ro
       - prom-data:/prometheus
     ports:
@@ -26,7 +26,7 @@ services:
     volumes:
       - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
-    # sem ports: so o Caddy (push) e o Grafana (query) falam com ele
+    # No ports: only Caddy (push) and Grafana (query) talk to it.
 
   grafana:
     image: grafana/grafana:11.5.0
@@ -37,7 +37,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN}
       - GF_USERS_ALLOW_SIGN_UP=false
-      # fase futura (alertas): descomentar junto com os .example de provisioning/alerting/
+      # Future phase (alerting): uncomment together with the .example files in
+      # provisioning/alerting/.
       # - TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL}
     volumes:
       - grafana-data:/var/lib/grafana
@@ -50,11 +51,17 @@ services:
     restart: unless-stopped
     environment:
       - GRAFANA_DOMAIN=${GRAFANA_DOMAIN}
-    # Basic auth do push do Loki. NAO usar `environment` com ${...} aqui: o hash
-    # bcrypt tem a forma $2a$14$<salt>..., e o Compose interpola o $<salt> como
-    # variavel inexistente e o substitui por vazio — o hash chega mutilado no
-    # container, o Caddy aceita a config como valida e toda autenticacao falha
-    # com 401. `env_file` entrega o valor literal, sem interpolacao.
+    # Basic auth for the Loki push endpoint, kept out of .env.
+    #
+    # Compose interpolates $VAR in BOTH `environment` and `env_file`. A bcrypt
+    # hash has the shape $2a$14$<salt>..., so Compose reads $<salt> as an
+    # undefined variable and drops it: the hash arrives mutilated, Caddy accepts
+    # the config as valid, and every request fails with 401 — including the
+    # correct credential.
+    #
+    # env_file does not make that go away. The `$` must be written doubled in
+    # secrets/caddy.env, and Compose turns `$$` back into a single `$`. See the
+    # README for the generation command.
     env_file:
       - ./secrets/caddy.env
     ports:
@@ -64,8 +71,8 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
 
-# Nomes fixos (sem prefixo do projeto) para os scripts de backup/restore
-# funcionarem igual em qualquer host.
+# Fixed names, without the project prefix, so the backup/restore scripts behave
+# identically on any host.
 volumes:
   prom-data:
     name: pt-obs-prom-data

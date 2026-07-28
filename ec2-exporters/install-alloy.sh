@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Instala o Grafana Alloy na EC2 da aplicacao para enviar os logs do PM2 ao Loki.
+# Install Grafana Alloy on the application EC2 to ship the PM2 logs to Loki.
 #
-# A senha e lida do STDIN, nunca de argumento nem de variavel na linha de
-# comando: argumento de processo e visivel para qualquer usuario local via `ps`.
+# The password is read from STDIN, never from an argument or a command-line
+# variable: process arguments are visible to any local user through `ps`.
 #
-# Uso (a partir do host do stack, encadeando os dois SSH):
+# Usage (from the stack host, chaining both SSH hops):
 #   ssh vps-obs 'cat /opt/observability/secrets/loki_push_password' \
 #     | ssh ec2-pt 'cd /tmp/alloy-install && LOKI_PUSH_USER=alloy ./install-alloy.sh'
+#
+# ALLOY_VERSION pins the package. Leave it pinned: an unpinned `dnf install
+# alloy` silently drifts to whatever is newest, which makes a broken log
+# pipeline impossible to reproduce against the version that was reviewed.
 set -euo pipefail
 
+ALLOY_VERSION="${ALLOY_VERSION:-1.18.0}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-: "${LOKI_PUSH_USER:?defina LOKI_PUSH_USER}"
+: "${LOKI_PUSH_USER:?set LOKI_PUSH_USER}"
 read -r LOKI_PUSH_PASSWORD || true
-[ -n "${LOKI_PUSH_PASSWORD:-}" ] || { echo "FALHOU: envie a senha pelo stdin"; exit 1; }
+[ -n "${LOKI_PUSH_PASSWORD:-}" ] || { echo "FAILED: send the password on stdin"; exit 1; }
 
-# Repo oficial da Grafana (Amazon Linux 2023 usa dnf/rpm).
+# Grafana's official repository (Amazon Linux 2023 uses dnf/rpm).
 sudo tee /etc/yum.repos.d/grafana.repo >/dev/null <<'EOF'
 [grafana]
 name=grafana
@@ -26,27 +31,35 @@ gpgkey=https://rpm.grafana.com/gpg.key
 sslverify=1
 EOF
 
-sudo dnf install -y alloy
+sudo dnf install -y "alloy-${ALLOY_VERSION}"
+
+INSTALLED="$(rpm -q --queryformat '%{VERSION}' alloy)"
+[ "$INSTALLED" = "$ALLOY_VERSION" ] || {
+  echo "FAILED: expected alloy ${ALLOY_VERSION}, got ${INSTALLED}"
+  exit 1
+}
+echo "OK: alloy ${INSTALLED} installed"
 
 sudo mkdir -p /etc/alloy
 sudo cp "${DIR}/alloy-config.alloy" /etc/alloy/config.alloy
 
-# A credencial vai no EnvironmentFile, fora da linha de comando.
+# The credential goes in the EnvironmentFile, off the command line.
 sudo tee /etc/alloy/alloy.env >/dev/null <<EOF
 LOKI_PUSH_USER=${LOKI_PUSH_USER}
 LOKI_PUSH_PASSWORD=${LOKI_PUSH_PASSWORD}
 EOF
 sudo chmod 600 /etc/alloy/alloy.env
 
-# O usuario alloy precisa atravessar /home/ec2-user para chegar aos logs.
-# Medido na EC2: .pm2 e .pm2/logs ja sao 755 e os arquivos ja sao 644 — o unico
-# bloqueio e o home, que e 700. Por isso g+x (grupo) e nao o+x (todos): o grupo
-# ec2-user nao tem outros membros, entao na pratica so o alloy ganha travessia.
+# The alloy user needs to traverse /home/ec2-user to reach the logs. Measured on
+# the host: .pm2 and .pm2/logs are already 755 and the files already 644 — the
+# only barrier is the home directory at 700. Hence g+x (group) and not o+x
+# (everyone): the ec2-user group has no other members, so in practice only alloy
+# gains access.
 sudo usermod -a -G ec2-user alloy
 sudo chmod g+x /home/ec2-user
 
-# O pacote sobe o alloy apontando para /etc/alloy/config.alloy por padrao; o
-# override injeta so a credencial.
+# The package already points alloy at /etc/alloy/config.alloy; the override only
+# injects the credential.
 sudo mkdir -p /etc/systemd/system/alloy.service.d
 sudo tee /etc/systemd/system/alloy.service.d/override.conf >/dev/null <<'EOF'
 [Service]
@@ -57,29 +70,29 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now alloy
 sudo systemctl restart alloy
 
-echo "--- validacao ---"
+echo "--- validation ---"
 for _ in $(seq 15); do
   systemctl is-active --quiet alloy && break
   sleep 1
 done
-systemctl is-active --quiet alloy || { echo "FALHOU: alloy nao esta ativo"; sudo journalctl -u alloy -n 30 --no-pager; exit 1; }
-echo "OK: alloy ativo"
+systemctl is-active --quiet alloy || { echo "FAILED: alloy is not active"; sudo journalctl -u alloy -n 30 --no-pager; exit 1; }
+echo "OK: alloy active"
 
-echo "--- nenhuma porta alcancavel de fora ---"
-# O alloy abre a UI dele em 127.0.0.1:12345 por padrao, o que e aceitavel: nao
-# e alcancavel nem pela internet nem pelo IP privado da VPC. O que nao pode e
-# ele escutar em 0.0.0.0 ou num IP de interface.
+echo "--- nothing reachable from outside ---"
+# Alloy binds its own UI on 127.0.0.1:12345 by default, which is acceptable: it
+# is reachable neither from the internet nor from the VPC private IP. What must
+# not happen is a bind on 0.0.0.0 or on an interface address.
 #
-# A espera nao e opcional: sem ela o check roda antes do bind e "passa" sempre,
-# reportando OK justamente quando ainda nao ha o que verificar.
+# The wait is not optional: without it the check runs before the bind and always
+# "passes", reporting OK exactly when there is nothing to verify yet.
 for _ in $(seq 15); do
   sudo ss -tlnp 2>/dev/null | grep -q "alloy" && break
   sleep 1
 done
-EXPOSTA=$(sudo ss -tlnp 2>/dev/null | grep "alloy" | awk '{print $4}' | grep -vE '^(127\.0\.0\.1|\[::1\]):' || true)
-if [ -n "$EXPOSTA" ]; then
-  echo "FALHOU: alloy escutando fora do loopback:"
-  echo "$EXPOSTA"
+EXPOSED=$(sudo ss -tlnp 2>/dev/null | grep "alloy" | awk '{print $4}' | grep -vE '^(127\.0\.0\.1|\[::1\]):' || true)
+if [ -n "$EXPOSED" ]; then
+  echo "FAILED: alloy listening outside loopback:"
+  echo "$EXPOSED"
   exit 1
 fi
-echo "OK: alloy so em loopback ($(sudo ss -tlnp 2>/dev/null | grep alloy | awk '{print $4}' | tr '\n' ' '))"
+echo "OK: alloy on loopback only ($(sudo ss -tlnp 2>/dev/null | grep alloy | awk '{print $4}' | tr '\n' ' '))"

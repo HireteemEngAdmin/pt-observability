@@ -1,5 +1,5 @@
-# Single binary, storage em disco. Nada de multi-tenant: auth_enabled false, e o
-# acesso e controlado pelo basic auth do Caddy na borda.
+# Single binary, storage on local disk. Not multi-tenant: auth_enabled is false
+# and access is gated by Caddy's basic auth at the edge.
 auth_enabled: false
 
 server:
@@ -29,16 +29,17 @@ schema_config:
         period: 24h
 
 limits_config:
-  # 30 dias — decisao do time; os logs contem PII, nao aumentar sem discutir.
+  # 30 days — the team's decision; these logs carry PII, do not raise it
+  # without discussing first.
   retention_period: 720h
-  # Os logs do PM2 podem chegar atrasados numa reinicializacao do Alloy.
+  # PM2 logs can arrive late when Alloy restarts and replays a file.
   reject_old_samples: true
   reject_old_samples_max_age: 168h
   volume_enabled: true
 
 compactor:
   working_directory: /loki/compactor
-  # Sem retention_enabled o retention_period acima e ignorado em silencio.
+  # Without retention_enabled the retention_period above is silently ignored.
   retention_enabled: true
   delete_request_store: filesystem
   compaction_interval: 10m

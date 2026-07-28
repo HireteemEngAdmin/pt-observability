@@ -1,6 +1,6 @@
 {$GRAFANA_DOMAIN} {
-    # Push de logs do Alloy. Precisa vir antes do handle generico: sem isto o
-    # Grafana captura a rota e responde 302 para /login em vez de 401.
+    # Alloy's log push. Must come before the catch-all handle: without it
+    # Grafana claims the route and answers 302 to /login instead of 401.
     handle /loki/* {
         basic_auth {
             {$LOKI_PUSH_USER} {$LOKI_PUSH_BCRYPT}

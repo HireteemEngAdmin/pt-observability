@@ -1,176 +1,200 @@
 # pt-observability
 
-Stack de observabilidade do Performance Tracker: Prometheus + Grafana + Caddy em
-docker-compose, com scrape remoto da EC2 da aplicacao (API, cron e node_exporter),
-restrito por security group ao IP do host que roda este stack.
+Observability stack for the Performance Tracker: Prometheus, Loki, Grafana and
+Caddy on docker-compose. Metrics are scraped remotely from the application EC2
+(API, cron and node_exporter); logs are pushed from that EC2 by Grafana Alloy.
 
-Todo o stack e codigo: clone + `.env` + `docker compose up -d` reproduz o ambiente
-em qualquer host com Docker. Hoje roda na VPS; se for aprovado migrar para uma EC2
-dedicada, seguir o runbook no fim deste arquivo.
+The whole stack is code: clone, add `.env`, run `docker compose up -d` and the
+environment reproduces on any host with Docker. It currently runs on the VPS; if
+moving to a dedicated EC2 is approved, follow the runbook at the end of this
+file.
 
-Plano completo (fases, alertas, decisoes): pagina "Plano de Implementacao:
-Observabilidade Performance Tracker" no Notion.
+The full plan — phases, alerting, decisions — lives in the Notion page
+"Plano de Implementacao: Observabilidade Performance Tracker".
 
-## Estrutura
+## Layout
 
 ```
-docker-compose.yml            # prometheus + loki + grafana + caddy (TLS automatico)
-.env.example                  # copiar para .env (nunca commitado)
-secrets/                      # senhas e credenciais (NUNCA commitado)
-caddy/Caddyfile               # dominio via env; roteia /loki/* com basic auth
-prometheus/prometheus.yml     # scrape configs (targets = EC2 da aplicacao)
-loki/loki-config.yml          # storage em disco, retencao 30d
+docker-compose.yml            # prometheus + loki + grafana + caddy (automatic TLS)
+.env.example                  # copy to .env (never committed)
+secrets/                      # passwords and credentials (NEVER committed)
+caddy/Caddyfile               # domain from env; routes /loki/* behind basic auth
+prometheus/prometheus.yml     # scrape configs (targets = application EC2)
+loki/loki-config.yml          # filesystem storage, 30 day retention
 grafana/provisioning/
-  datasources/                # datasources Prometheus e Loki
-  dashboards/                 # provider: carrega ../dashboards/*.json
-  alerting/                   # templates .example p/ Teams (fase futura)
-grafana/dashboards/           # JSONs dos dashboards + o gerador do custom
-ec2-exporters/                # node_exporter (metricas) e alloy (logs) na EC2
-scripts/                      # backup/restore dos volumes (migracao de host)
+  datasources/                # Prometheus and Loki datasources
+  dashboards/                 # provider: loads ../dashboards/*.json
+  alerting/                   # .example templates for Teams (future phase)
+grafana/dashboards/           # dashboard JSON plus the generator for the custom one
+ec2-exporters/                # node_exporter (metrics) and alloy (logs) on the EC2
+scripts/                      # volume backup/restore (host migration)
 ```
 
-## Subir do zero (qualquer host com Docker)
+## Standing it up from scratch (any host with Docker)
 
 ```bash
-git clone <url-deste-repo> /opt/observability
+git clone <this-repo-url> /opt/observability
 cd /opt/observability
-cp .env.example .env   # preencher senha do Grafana e dominio
+cp .env.example .env   # fill in the Grafana password and the domain
 docker compose up -d
 ```
 
-Pre-requisitos do host: Docker + compose plugin; DNS A do `GRAFANA_DOMAIN`
-apontando para o IP do host (portas 80/443 abertas); IP do host presente na
-allowlist do security group da EC2 da aplicacao (portas de metrica).
+Host prerequisites: Docker with the compose plugin; an A record for
+`GRAFANA_DOMAIN` pointing at the host (ports 80/443 open).
 
-Validacao: `curl -s localhost:9090/api/v1/targets | grep health` deve mostrar os
-3 jobs up; `https://$GRAFANA_DOMAIN` deve abrir com TLS valido.
+Validation: `curl -s localhost:9090/api/v1/targets | grep health` should show
+all three jobs up, and `https://$GRAFANA_DOMAIN` should load with a valid
+certificate.
 
-## Regra de ouro: nada existe so na UI
+Note that `docker compose up -d` does not recreate a container that is already
+running, and Grafana only reads its provisioning at boot. After changing
+anything under `grafana/provisioning/`, use
+`docker compose up -d --force-recreate grafana` or the change is silently
+ignored.
 
-Qualquer coisa criada/editada na UI do Grafana deve voltar para o repo, senao a
-migracao de host perde tudo:
+## Golden rule: nothing exists only in the UI
 
-- **Dashboard**: Share > Export > Save JSON, salvar em `grafana/dashboards/`
-  e commitar. O provisioning recarrega sozinho.
-- **Alert rules**: Alerting > Alert rules > Export > YAML, salvar em
-  `grafana/provisioning/alerting/` e commitar.
-- Datasource ja e provisionado por arquivo; nao criar duplicado na UI. Contact
-  point e policy entram na fase de alertas (secao abaixo).
+Anything created or edited in the Grafana UI has to come back to the repo, or
+the next host migration loses it:
 
-## Alertas (fase futura, apos aprovacao do manager)
+- **Dashboards**: Share > Export > Save JSON into `grafana/dashboards/` and
+  commit. Provisioning reloads on its own. The custom dashboard is generated by
+  `grafana/dashboards/build-performance-tracker-api.py` — edit the generator, not
+  the JSON, or the next regeneration silently reverts the change.
+- **Alert rules**: Alerting > Alert rules > Export > YAML into
+  `grafana/provisioning/alerting/` and commit.
+- Datasources are already provisioned from files; do not create duplicates in
+  the UI. Contact points and policies belong to the alerting phase below.
 
-O nucleo sobe sem notificacoes: dashboards mostram o estado, ninguem e notificado.
-Quando a feature for aprovada:
+The same rule applies to the host itself: reach it through git, never `scp`. A
+file copied in by hand sits untracked while git also tracks it, and the next
+`git pull` aborts with "untracked working tree files would be overwritten".
 
-1. Criar o webhook do canal do Microsoft Teams via Workflows/Power Automate
-   ("When a Teams webhook request is received"); os connectors classicos do O365
-   foram descontinuados pela Microsoft.
-2. Adicionar `TEAMS_WEBHOOK_URL` ao `.env` e descomentar a linha correspondente
-   no `docker-compose.yml` (environment do grafana).
-3. Renomear os `.example` de `grafana/provisioning/alerting/` para `.yml` e rodar
-   `docker compose up -d`.
-4. Criar as regras de alerta (tabela na pagina do Notion), testar fire + resolve
-   e exportar o YAML das regras de volta para o repo.
+## Alerting (future phase, pending manager approval)
 
-## Exposicao das portas de metrica
+The core runs without notifications: dashboards show the state, nobody gets
+paged. Once the feature is approved:
 
-As 3 portas ficam abertas em `0.0.0.0/0` no security group da EC2: optou-se por
-nao colocar o IP do host de observabilidade nas regras da AWS. Consequencia
-pratica, por porta:
+1. Create the Microsoft Teams channel webhook through Workflows/Power Automate
+   ("When a Teams webhook request is received"). Microsoft retired the classic
+   O365 connectors, so do not use those.
+2. Add `TEAMS_WEBHOOK_URL` to `.env` and uncomment the matching line in
+   `docker-compose.yml` (the grafana environment).
+3. Rename the `.example` files under `grafana/provisioning/alerting/` to `.yml`
+   and run `docker compose up -d`.
+4. Create the alert rules (the table lives in the Notion page), test both fire
+   and resolve, then export the rules back into the repo as YAML.
 
-| Porta | Job | Protecao | Por que |
-|-------|-----|----------|---------|
-| 3000 | api | nenhuma | `/metrics` da API ja era publico antes deste stack |
-| 9464 | cron | nenhuma | mesma classe de dado que a 3000 ja expunha |
-| 9100 | node | **TLS + basic auth** | sem isso vazaria versao do kernel, IP privado e topologia do host para qualquer scanner |
+## Metric port exposure
 
-Restringir o `/metrics` publico da API (`METRICS_ALLOWED_IPS`) segue pendente na
-fase de codigo, no repo `performance-tracker`.
+All three ports are open to `0.0.0.0/0` in the EC2 security group: the decision
+was to keep the observability host's IP out of the AWS rules. What that means
+per port:
 
-## node_exporter na EC2 da aplicacao
+| Port | Job | Protection | Why |
+|------|-----|------------|-----|
+| 3000 | api | none | the API's `/metrics` was already public before this stack |
+| 9464 | cron | none | same class of data port 3000 already exposed |
+| 9100 | node | **TLS + basic auth** | without it the kernel version, private IP and host topology leak to any scanner |
 
-Gere a senha e o hash no host do stack (a senha em claro nunca vai para a EC2
-nem para o git):
+Restricting the API's public `/metrics` (`METRICS_ALLOWED_IPS`) is still open on
+the application side, in the `performance-tracker` repo.
+
+## node_exporter on the EC2
+
+Generate the password and the hash on the stack host — the plaintext never
+reaches the EC2 or git:
 
 ```bash
 mkdir -p secrets && umask 077
 openssl rand -base64 30 | tr -d '\n' > secrets/node_exporter_password
 python3 -c "import bcrypt;print(bcrypt.hashpw(open('secrets/node_exporter_password','rb').read(),bcrypt.gensalt(rounds=12)).decode())"
-# O container do Prometheus roda como nobody (uid 65534); sem este chown o
-# scrape do node falha com "permission denied", nao com erro de auth. O
-# diretorio precisa ir junto: 700 do root impede o container de atravessa-lo,
-# mesmo com o arquivo dentro ja pertencendo ao uid certo.
+# The Prometheus container runs as nobody (uid 65534); without this chown the
+# node scrape fails with "permission denied" rather than an auth error. The
+# directory needs it too: 700 owned by root stops the container from traversing
+# it even when the file inside already has the right owner.
 sudo chown 65534:65534 secrets secrets/node_exporter_password
 ```
 
-Na EC2, com o hash impresso acima:
+On the EC2, with the hash printed above:
 
 ```bash
-NODE_EXPORTER_BCRYPT='<hash>' PUBLIC_DNS='<dns-publico-da-ec2>' \
+NODE_EXPORTER_BCRYPT='<hash>' PUBLIC_DNS='<ec2-public-dns>' \
   ./install-node-exporter.sh
 ```
 
-O script gera o certificado autoassinado, escreve o `web-config.yml` e valida
-que a porta responde 401 sem credencial. Por fim copie o certificado para o
-repo, que o Prometheus o pina como CA:
+The script generates the self-signed certificate, writes `web-config.yml` and
+checks that the port answers 401 without a credential. Finally copy the
+certificate into the repo, where Prometheus pins it as a CA:
 
 ```bash
 scp <ec2>:/etc/node_exporter/node_exporter.crt prometheus/node_exporter-ca.crt
 ```
 
-Trocar a senha depois: repetir os dois blocos e `systemctl restart node_exporter`.
+To rotate the password later: repeat both blocks and
+`systemctl restart node_exporter`.
 
 ## Logs (Loki)
 
-Os logs do PM2 da EC2 chegam ao Loki pelo Grafana Alloy, que empurra por HTTPS
-em `/loki/api/v1/push` — mesma porta 443 do Grafana, sem subdominio novo.
-Retencao de 30 dias; os logs contem PII (nome de empresa, IDs), diferente das
-metricas.
+The EC2's PM2 logs reach Loki through Grafana Alloy, which pushes over HTTPS to
+`/loki/api/v1/push` — the same port 443 as Grafana, no extra subdomain.
+Retention is 30 days. Unlike the metrics, these logs carry PII (company names,
+customer IDs).
 
-Gerar a credencial do push (a senha em claro fica so em `secrets/`):
+Generate the push credential (the plaintext stays in `secrets/` only):
 
 ```bash
 umask 077
 openssl rand -base64 30 | tr -d '\n' > secrets/loki_push_password
 HASH=$( (cat secrets/loki_push_password; echo) | docker run --rm -i caddy:2 \
   caddy hash-password --algorithm bcrypt )
-# O $ precisa ir dobrado: o Compose interpola $2a$14$<salt> como variavel e
-# apaga o trecho do salt — inclusive via env_file. O hash chega mutilado, o
-# `caddy validate` aprova assim mesmo, e toda autenticacao passa a dar 401.
+# The $ has to be doubled. Compose interpolates $2a$14$<salt> as a variable and
+# drops the salt — in `env_file` just as much as in `environment`. The hash
+# arrives mutilated, `caddy validate` approves it anyway, and every request then
+# fails with 401, including the correct credential.
 ESC=$(printf '%s' "$HASH" | sed 's/\$/$$/g')
 { echo "LOKI_PUSH_USER=alloy"; printf 'LOKI_PUSH_BCRYPT=%s\n' "$ESC"; } > secrets/caddy.env
 chmod 600 secrets/caddy.env
 docker compose up -d --force-recreate caddy
 ```
 
-Validar (bcrypt tem 60 caracteres; menos que isso e o hash chegou cortado):
+Validate — a bcrypt hash is 60 characters, and anything shorter means it arrived
+truncated:
 
 ```bash
 docker compose exec -T caddy printenv LOKI_PUSH_BCRYPT | tr -d '\r\n' | wc -c
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://$GRAFANA_DOMAIN/loki/api/v1/push   # 401
 ```
 
-Instalacao do agente na EC2: ver `ec2-exporters/install-alloy.sh`.
+Installing the agent on the EC2: see `ec2-exporters/install-alloy.sh`.
 
-## Migracao para outro host (ex.: EC2 dedicada)
+The backend still logs mostly through `console.error`/`console.warn` rather than
+structured pino JSON, so filtering by level is heuristic: everything on stderr,
+plus stdout lines matching error/warn. Migrating those call sites to pino is the
+follow-up that removes the heuristic.
 
-O scrape de metricas e pull: na EC2 nada muda alem de uma regra de SG. Os logs
-sao push, entao a EC2 precisa de um passo a mais (item 5).
+## Migrating to another host (e.g. a dedicated EC2)
 
-1. Provisionar o host novo com Docker + compose; apontar o DNS A do
-   `GRAFANA_DOMAIN` para o IP novo (Caddy reemite o certificado sozinho).
-2. Clonar o repo e copiar `.env` e o diretorio `secrets/` inteiro (segredos vem
-   do gerenciador de senhas; `secrets/` nao esta no git).
-3. **Mantendo o historico**: no host antigo, `docker compose stop prometheus loki grafana`,
-   rodar `scripts/backup-volumes.sh`, copiar `backup/` para o host novo e rodar
-   `scripts/restore-volumes.sh` la. **Sem historico**: pular; dashboards e alertas
-   vem do git, perde-se o TSDB e os logs.
-4. No SG da EC2 da aplicacao: as 3 portas de metrica estao em `0.0.0.0/0`, entao
-   nada muda (se o host novo estiver na MESMA VPC, vale trocar por referencia de
-   SG + IP privado e fechar a exposicao publica).
-5. Na EC2, apontar o Alloy para o dominio novo se ele mudar: editar o `url` em
-   `/etc/alloy/config.alloy` e `systemctl restart alloy`. Se o `GRAFANA_DOMAIN`
-   for o mesmo, nada a fazer — o push segue o DNS.
-6. `docker compose up -d --force-recreate` no host novo; validar targets up,
-   login no Grafana e log chegando (`{job="cron"}` no Explore).
-7. `docker compose down` no host antigo.
+Metric scraping is pull-based, so nothing changes on the application EC2 beyond
+a security group rule. Logs are push-based, which adds step 5.
+
+1. Provision the new host with Docker and the compose plugin; point the A record
+   for `GRAFANA_DOMAIN` at the new IP (Caddy reissues the certificate itself).
+2. Clone the repo and copy `.env` plus the whole `secrets/` directory — the
+   secrets come from the password manager, `secrets/` is not in git.
+3. **Keeping history**: on the old host run
+   `docker compose stop prometheus loki grafana`, then
+   `scripts/backup-volumes.sh`, copy `backup/` across and run
+   `scripts/restore-volumes.sh` there. **Without history**: skip it — dashboards
+   and alerts come from git, and only the TSDB and the logs are lost.
+4. In the application EC2's security group the three metric ports are on
+   `0.0.0.0/0`, so nothing changes. If the new host sits in the SAME VPC, it is
+   worth switching to a security group reference on the private IP and closing
+   the public exposure.
+5. On the EC2, point Alloy at the new domain if it changed: edit `url` in
+   `/etc/alloy/config.alloy` and `systemctl restart alloy`. If `GRAFANA_DOMAIN`
+   stays the same there is nothing to do — the push follows DNS.
+6. `docker compose up -d --force-recreate` on the new host; verify the targets
+   are up, the Grafana login works, and logs are arriving (`{job="cron"}` in
+   Explore).
+7. `docker compose down` on the old host.

@@ -1,19 +1,20 @@
-// Logs do PM2 -> Loki. Roda na EC2 da aplicacao, so conexao de saida.
+// PM2 logs -> Loki. Runs on the application EC2, outbound connections only.
 //
-// Duas regras moldam estes globs:
+// Two rules shape these globs:
 //
-// 1. O `server` roda em cluster com 2 instancias (ecosystem.config.js), e nesse
-//    modo o PM2 sufixa o id da instancia: server-out-8.log, server-out-9.log.
-//    Apontar para server-out.log le um arquivo morto de antes do cluster — foi
-//    o que aconteceu na primeira tentativa, e os logs da API nao chegavam.
-//    O id vem do contador interno do PM2 e muda quando processos sao
-//    recriados, entao o curinga e obrigatorio; nao fixar 8 e 9.
+// 1. `server` runs in PM2 cluster mode with two instances
+//    (ecosystem.config.js), and in that mode PM2 suffixes the instance id:
+//    server-out-8.log, server-out-9.log. Pointing at server-out.log reads a
+//    file that has been dead since the cluster change — that was the first
+//    attempt, and none of the API's logs arrived. The ids come from PM2's
+//    internal counter and change when processes are recreated, so the wildcard
+//    is required; do not hardcode 8 and 9.
 //
-// 2. __path_exclude__ tira os rotacionados: o pm2-logrotate gera
-//    server-out-8__2026-07-28_00-00-00.log a cada rotacao, e sem a exclusao o
-//    Alloy trata cada um como arquivo novo e reingere o conteudo inteiro.
+// 2. __path_exclude__ keeps the rotated copies out: pm2-logrotate produces
+//    server-out-8__2026-07-28_00-00-00.log on every rotation, and without the
+//    exclusion Alloy treats each one as a new file and re-ingests it whole.
 //
-// postgres-mcp-*.log fica de fora por nao ser da aplicacao.
+// postgres-mcp-*.log is left out because it is not part of the application.
 
 local.file_match "pm2" {
   path_targets = [
@@ -30,17 +31,21 @@ loki.source.file "pm2" {
 }
 
 loki.process "pm2" {
-  // Junta dumps de objeto multi-linha na entrada anterior.
+  // Fold multi-line object dumps back into the preceding entry.
   //
-  // firstline casa "linha que NAO comeca com espaco nem com }":
-  //   [hubspot] POST ... responded 429   -> nova entrada
-  //   {"level":50,"msg":"..."}           -> nova entrada (pino, sempre 1 linha)
-  //     stripeCustomerId: 'cus_...',     -> continuacao (indentada)
-  //   }                                  -> continuacao (fecha o objeto)
+  // firstline matches "a line that does NOT start with a space, a tab or }":
+  //   [hubspot] POST ... responded 429   -> new entry
+  //   {"level":50,"msg":"..."}           -> new entry (pino, always one line)
+  //     stripeCustomerId: 'cus_...',     -> continuation (indented)
+  //   }                                  -> continuation (closes the object)
   //
-  // Escrito como classe negada para nao precisar escapar aspas no regex.
+  // The tab matters: Node indents object dumps with spaces, but a hand-written
+  // console.log can use tabs, and a negated class that omits \t would treat
+  // those as new entries and split the dump apart.
+  //
+  // Written as a negated class so the regex needs no escaped quotes.
   stage.multiline {
-    firstline     = "^[^ }]"
+    firstline     = "^[^ \t}]"
     max_wait_time = "3s"
     max_lines     = 200
   }
