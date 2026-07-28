@@ -65,10 +65,21 @@ done
 systemctl is-active --quiet alloy || { echo "FALHOU: alloy nao esta ativo"; sudo journalctl -u alloy -n 30 --no-pager; exit 1; }
 echo "OK: alloy ativo"
 
-echo "--- nenhuma porta inbound nova ---"
-if sudo ss -tlnp | grep -qE ":(12345|4040)\b"; then
-  echo "ATENCAO: alloy abriu porta de escuta"
-  sudo ss -tlnp | grep -E ":(12345|4040)\b"
+echo "--- nenhuma porta alcancavel de fora ---"
+# O alloy abre a UI dele em 127.0.0.1:12345 por padrao, o que e aceitavel: nao
+# e alcancavel nem pela internet nem pelo IP privado da VPC. O que nao pode e
+# ele escutar em 0.0.0.0 ou num IP de interface.
+#
+# A espera nao e opcional: sem ela o check roda antes do bind e "passa" sempre,
+# reportando OK justamente quando ainda nao ha o que verificar.
+for _ in $(seq 15); do
+  sudo ss -tlnp 2>/dev/null | grep -q "alloy" && break
+  sleep 1
+done
+EXPOSTA=$(sudo ss -tlnp 2>/dev/null | grep "alloy" | awk '{print $4}' | grep -vE '^(127\.0\.0\.1|\[::1\]):' || true)
+if [ -n "$EXPOSTA" ]; then
+  echo "FALHOU: alloy escutando fora do loopback:"
+  echo "$EXPOSTA"
   exit 1
 fi
-echo "OK: sem porta nova"
+echo "OK: alloy so em loopback ($(sudo ss -tlnp 2>/dev/null | grep alloy | awk '{print $4}' | tr '\n' ' '))"

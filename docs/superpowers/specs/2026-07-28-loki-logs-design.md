@@ -155,7 +155,10 @@ ninguem recebe mensagem.
 
 - [ ] Loki respondendo, datasource visivel no Grafana
 - [ ] `/loki/api/v1/push` exige credencial: 401 sem, 204 com
-- [ ] Alloy ativo na EC2, sem porta inbound nova (validar com `ss -tlnp`)
+- [ ] Alloy ativo na EC2, sem porta alcancavel de fora (validar com `ss -tlnp`).
+      O Alloy abre a UI dele em `127.0.0.1:12345`; loopback e aceitavel, o que
+      nao pode e bind em `0.0.0.0` ou num IP de interface. Verificado tambem
+      pelo IP publico e pelo IP privado da VPC — inalcancavel nos dois.
 - [ ] Log das ultimas horas dos 4 arquivos consultavel no Explore do Grafana
 - [ ] Um erro provocado de proposito aparece no Grafana em menos de 30s
 - [ ] Nenhuma reingestao de arquivo rotacionado (contagem estavel apos rotacao)
