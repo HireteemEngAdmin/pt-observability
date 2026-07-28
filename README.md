@@ -118,6 +118,38 @@ scp <ec2>:/etc/node_exporter/node_exporter.crt prometheus/node_exporter-ca.crt
 
 Trocar a senha depois: repetir os dois blocos e `systemctl restart node_exporter`.
 
+## Logs (Loki)
+
+Os logs do PM2 da EC2 chegam ao Loki pelo Grafana Alloy, que empurra por HTTPS
+em `/loki/api/v1/push` — mesma porta 443 do Grafana, sem subdominio novo.
+Retencao de 30 dias; os logs contem PII (nome de empresa, IDs), diferente das
+metricas.
+
+Gerar a credencial do push (a senha em claro fica so em `secrets/`):
+
+```bash
+umask 077
+openssl rand -base64 30 | tr -d '\n' > secrets/loki_push_password
+HASH=$( (cat secrets/loki_push_password; echo) | docker run --rm -i caddy:2 \
+  caddy hash-password --algorithm bcrypt )
+# O $ precisa ir dobrado: o Compose interpola $2a$14$<salt> como variavel e
+# apaga o trecho do salt — inclusive via env_file. O hash chega mutilado, o
+# `caddy validate` aprova assim mesmo, e toda autenticacao passa a dar 401.
+ESC=$(printf '%s' "$HASH" | sed 's/\$/$$/g')
+{ echo "LOKI_PUSH_USER=alloy"; printf 'LOKI_PUSH_BCRYPT=%s\n' "$ESC"; } > secrets/caddy.env
+chmod 600 secrets/caddy.env
+docker compose up -d --force-recreate caddy
+```
+
+Validar (bcrypt tem 60 caracteres; menos que isso e o hash chegou cortado):
+
+```bash
+docker compose exec -T caddy printenv LOKI_PUSH_BCRYPT | tr -d '\r\n' | wc -c
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://$GRAFANA_DOMAIN/loki/api/v1/push   # 401
+```
+
+Instalacao do agente na EC2: ver `ec2-exporters/install-alloy.sh`.
+
 ## Migracao para outro host (ex.: EC2 dedicada)
 
 O scrape e pull: na EC2 da aplicacao nada muda alem de uma regra de SG.
