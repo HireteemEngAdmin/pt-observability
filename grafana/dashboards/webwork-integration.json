@@ -365,13 +365,71 @@
     },
     {
       "type": "stat",
-      "title": "Latency p95",
-      "description": "",
+      "title": "Requests (range)",
+      "description": "Calls over the selected range, honouring the job, endpoint, method and status filters. increase() and not a raw counter sum: the counter resets whenever the process restarts, and summing it across a restart reports a total that never happened. That does make it an estimate rather than an exact count, since increase() extrapolates to the edges of the range, so read it as a volume and not as a receipt. or vector(0) so a range with no calls renders 0 rather than \"No data\", which would be indistinguishable from a broken scrape.",
       "id": 7,
       "gridPos": {
         "h": 4,
         "w": 3,
         "x": 15,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__range])) or vector(0)",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Latency p95",
+      "description": "",
+      "id": 8,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
         "y": 1
       },
       "datasource": {
@@ -433,11 +491,11 @@
       "type": "stat",
       "title": "HTTP 429 (range)",
       "description": "Rate-limited responses over the selected range.",
-      "id": 8,
+      "id": 9,
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 18,
+        "x": 21,
         "y": 1
       },
       "datasource": {
@@ -495,12 +553,12 @@
       "type": "stat",
       "title": "In flight",
       "description": "Calls started and not yet settled. With no timeout in the client, a number that stays high is the signature of hung requests.",
-      "id": 9,
+      "id": 10,
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 21,
-        "y": 1
+        "x": 0,
+        "y": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -561,11 +619,11 @@
       "type": "stat",
       "title": "Consecutive failures",
       "description": "Failed calls since the last success, worst process. Rises the moment WebWork starts refusing and drops to zero on the first success \u2014 the fastest signal that the integration is in trouble.",
-      "id": 10,
+      "id": 11,
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 0,
+        "x": 3,
         "y": 5
       },
       "datasource": {
@@ -627,11 +685,11 @@
       "type": "stat",
       "title": "Consecutive successes",
       "description": "Successful calls since the last failure, weakest process. Useful to confirm a recovery actually held rather than flapping.",
-      "id": 11,
+      "id": 12,
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 3,
+        "x": 6,
         "y": 5
       },
       "datasource": {
@@ -685,11 +743,11 @@
       "type": "stat",
       "title": "Job: time since last success",
       "description": "The reconcile job runs nightly at 03:00 UTC, so anything past ~24h means a run was missed or failed.",
-      "id": 12,
+      "id": 13,
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 6,
+        "x": 9,
         "y": 5
       },
       "datasource": {
@@ -751,11 +809,11 @@
       "type": "timeseries",
       "title": "Job runs by status",
       "description": "Terminal status of each execution.",
-      "id": 13,
+      "id": 14,
       "gridPos": {
         "h": 4,
-        "w": 12,
-        "x": 12,
+        "w": 9,
+        "x": 15,
         "y": 5
       },
       "datasource": {
@@ -822,7 +880,7 @@
         "x": 0,
         "y": 9
       },
-      "id": 14,
+      "id": 15,
       "collapsed": false,
       "panels": []
     },
@@ -830,7 +888,7 @@
       "type": "timeseries",
       "title": "Requests over time",
       "description": "Total call rate after the dashboard filters.",
-      "id": 15,
+      "id": 16,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -896,7 +954,7 @@
       "type": "bargauge",
       "title": "Most called endpoints",
       "description": "Call count per normalized endpoint over the selected range.",
-      "id": 16,
+      "id": 17,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -979,7 +1037,7 @@
       "type": "timeseries",
       "title": "Requests by endpoint",
       "description": "",
-      "id": 17,
+      "id": 18,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1045,7 +1103,7 @@
       "type": "timeseries",
       "title": "Requests by status code",
       "description": "status=\"none\" means the call never got a response \u2014 a timeout or a socket failure.",
-      "id": 18,
+      "id": 19,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1111,7 +1169,7 @@
       "type": "timeseries",
       "title": "Requests by HTTP method",
       "description": "",
-      "id": 19,
+      "id": 20,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1176,7 +1234,7 @@
     {
       "type": "heatmap",
       "title": "Call volume by hour of day",
-      "id": 20,
+      "id": 21,
       "description": "Hourly totals across the selected range. The reconcile job at 03:00 UTC and the morning provisioning rush should stand out as bands.",
       "gridPos": {
         "h": 8,
@@ -1246,7 +1304,7 @@
         "x": 0,
         "y": 34
       },
-      "id": 21,
+      "id": 22,
       "collapsed": false,
       "panels": []
     },
@@ -1254,7 +1312,7 @@
       "type": "timeseries",
       "title": "Latency percentiles",
       "description": "The mean is included because a percentile alone hides a bimodal distribution.",
-      "id": 22,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1368,7 +1426,7 @@
       "type": "bargauge",
       "title": "Slowest endpoints (p95)",
       "description": "",
-      "id": 23,
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1451,7 +1509,7 @@
       "type": "timeseries",
       "title": "Requests in flight",
       "description": "Concurrency against WebWork. Sustained growth with no matching request rate means calls are hanging.",
-      "id": 24,
+      "id": 25,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1517,7 +1575,7 @@
       "type": "timeseries",
       "title": "Time spent awaiting WebWork",
       "description": "Cumulative wait divided by wall clock. A value above 1 means calls overlap; it is effectively the average number of calls in flight.",
-      "id": 25,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1583,7 +1641,7 @@
       "type": "timeseries",
       "title": "Job duration",
       "description": "",
-      "id": 26,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1654,7 +1712,7 @@
         "x": 0,
         "y": 51
       },
-      "id": 27,
+      "id": 28,
       "collapsed": false,
       "panels": []
     },
@@ -1662,7 +1720,7 @@
       "type": "timeseries",
       "title": "HTTP 429 over time",
       "description": "When these appear tells you which job or rush hit the ceiling.",
-      "id": 28,
+      "id": 29,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1728,7 +1786,7 @@
       "type": "bargauge",
       "title": "Endpoints hit hardest by rate limiting",
       "description": "",
-      "id": 29,
+      "id": 30,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -1811,7 +1869,7 @@
       "type": "timeseries",
       "title": "Retry-After advertised by WebWork",
       "description": "Only populated when WebWork sends the header. Nothing consumes it yet \u2014 the client has no backoff \u2014 so this is the budget a future retry would have to respect.",
-      "id": 30,
+      "id": 31,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1889,7 +1947,7 @@
       "type": "timeseries",
       "title": "Attempts per operation",
       "description": "Attempts an operation actually made. Above 1 means pagination, not a retry loop: the client has no retry. A caller retrying shows up here too.",
-      "id": 31,
+      "id": 32,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -1955,7 +2013,7 @@
       "type": "timeseries",
       "title": "Operations settled, by outcome",
       "description": "",
-      "id": 32,
+      "id": 33,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -2021,7 +2079,7 @@
       "type": "logs",
       "title": "Rate limit events",
       "description": "pino lines where rate_limited is true, carrying the endpoint, the Retry-After value and the correlation id.",
-      "id": 33,
+      "id": 34,
       "gridPos": {
         "h": 10,
         "w": 24,
@@ -2061,7 +2119,7 @@
         "x": 0,
         "y": 78
       },
-      "id": 34,
+      "id": 35,
       "collapsed": false,
       "panels": []
     },
@@ -2069,7 +2127,7 @@
       "type": "timeseries",
       "title": "Errors over time",
       "description": "http_4xx / http_5xx / rate_limited / timeout / connection / unexpected.",
-      "id": 35,
+      "id": 36,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2135,7 +2193,7 @@
       "type": "bargauge",
       "title": "Errors by endpoint",
       "description": "",
-      "id": 36,
+      "id": 37,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2218,7 +2276,7 @@
       "type": "timeseries",
       "title": "Transport failures",
       "description": "Failures with no HTTP response. The client sets no timeout, so a \"timeout\" here is undici's own default rather than a deadline we chose.",
-      "id": 37,
+      "id": 38,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2308,7 +2366,7 @@
       "type": "timeseries",
       "title": "Errors by status code",
       "description": "",
-      "id": 38,
+      "id": 39,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2374,7 +2432,7 @@
       "type": "logs",
       "title": "WebWork logs",
       "description": "module is a field inside the pino JSON, not a Loki stream label \u2014 the labels are job, stream, host and filename \u2014 so it has to be matched after | json, never as {module=\"webwork\"}, which silently returns nothing. Drop the outcome filter to see successes too.",
-      "id": 39,
+      "id": 40,
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -2414,7 +2472,7 @@
         "x": 0,
         "y": 107
       },
-      "id": 40,
+      "id": 41,
       "collapsed": false,
       "panels": []
     },
@@ -2422,7 +2480,7 @@
       "type": "stat",
       "title": "Runs in range",
       "description": "",
-      "id": 41,
+      "id": 42,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2480,7 +2538,7 @@
       "type": "stat",
       "title": "Currently running",
       "description": "The cron is overlap-guarded, so anything above 1 means two processes are running it at once \u2014 expected with multiple instances, worth checking otherwise.",
-      "id": 42,
+      "id": 43,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2542,7 +2600,7 @@
       "type": "stat",
       "title": "Last run",
       "description": "",
-      "id": 43,
+      "id": 44,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2600,7 +2658,7 @@
       "type": "stat",
       "title": "Records processed",
       "description": "",
-      "id": 44,
+      "id": 45,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2658,7 +2716,7 @@
       "type": "stat",
       "title": "Succeeded",
       "description": "",
-      "id": 45,
+      "id": 46,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2716,7 +2774,7 @@
       "type": "stat",
       "title": "Failed",
       "description": "",
-      "id": 46,
+      "id": 47,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -2778,7 +2836,7 @@
       "type": "timeseries",
       "title": "Records handled per run",
       "description": "",
-      "id": 47,
+      "id": 48,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2844,7 +2902,7 @@
       "type": "timeseries",
       "title": "WebWork calls per job execution",
       "description": "How much WebWork traffic one reconcile run generates \u2014 the number to watch against the 60/min ceiling.",
-      "id": 48,
+      "id": 49,
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -2922,7 +2980,7 @@
       "type": "logs",
       "title": "Job logs",
       "description": "Start, completion and failure lines for the reconcile job, with duration, record counts and the JobExecution id.",
-      "id": 49,
+      "id": 50,
       "gridPos": {
         "h": 10,
         "w": 24,

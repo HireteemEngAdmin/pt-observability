@@ -179,32 +179,43 @@ panels.append(stat(
     12, y, w=3, dec=1,
     desc="WebWork's documented ceiling is 60/min per workspace."))
 panels.append(stat(
+    "Requests (range)",
+    f'sum(increase(webwork_requests_total{{{SEL_STATUS}}}[$__range])) or vector(0)',
+    15, y, w=3, dec=0,
+    desc="Calls over the selected range, honouring the job, endpoint, method and status "
+         "filters. increase() and not a raw counter sum: the counter resets whenever the "
+         "process restarts, and summing it across a restart reports a total that never "
+         "happened. That does make it an estimate rather than an exact count, since "
+         "increase() extrapolates to the edges of the range, so read it as a volume and "
+         "not as a receipt. or vector(0) so a range with no calls renders 0 rather than "
+         "\"No data\", which would be indistinguishable from a broken scrape."))
+panels.append(stat(
     "Latency p95",
     f'histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[5m])))',
-    15, y, w=3, unit="s", dec=2,
+    18, y, w=3, unit="s", dec=2,
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2},
            {"color": "red", "value": 5}]))
 panels.append(stat(
     "HTTP 429 (range)", f'sum(increase(webwork_rate_limited_total{{endpoint=~"$endpoint"}}[$__range])) or vector(0)',
-    18, y, w=3, dec=0,
+    21, y, w=3, dec=0,
     desc="Rate-limited responses over the selected range.",
     steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}]))
 panels.append(stat(
-    "In flight", 'sum(webwork_requests_in_flight{job=~"$job"})', 21, y, w=3, dec=0,
+    "In flight", 'sum(webwork_requests_in_flight{job=~"$job"})', 0, y + 4, w=3, dec=0,
     desc="Calls started and not yet settled. With no timeout in the client, a number that "
          "stays high is the signature of hung requests.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 5},
            {"color": "red", "value": 20}]))
 y += 4
 panels.append(stat(
-    "Consecutive failures", 'max(webwork_consecutive_failures{job=~"$job"})', 0, y, w=3, dec=0,
+    "Consecutive failures", 'max(webwork_consecutive_failures{job=~"$job"})', 3, y, w=3, dec=0,
     desc="Failed calls since the last success, worst process. Rises the moment WebWork starts "
          "refusing and drops to zero on the first success — the fastest signal that the "
          "integration is in trouble.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 3},
            {"color": "red", "value": 10}]))
 panels.append(stat(
-    "Consecutive successes", 'min(webwork_consecutive_successes{job=~"$job"})', 3, y, w=3, dec=0,
+    "Consecutive successes", 'min(webwork_consecutive_successes{job=~"$job"})', 6, y, w=3, dec=0,
     desc="Successful calls since the last failure, weakest process. Useful to confirm a "
          "recovery actually held rather than flapping.",
     steps=[{"color": "text", "value": None}]))
@@ -212,14 +223,14 @@ panels.append(stat(
     "Job: time since last success",
     'time() - max(webwork_job_last_success_timestamp_seconds{job_name=~"$wwjob"} or '
     'webwork_job_last_success_timestamp_seconds)',
-    6, y, w=6, unit="s",
+    9, y, w=6, unit="s",
     desc="The reconcile job runs nightly at 03:00 UTC, so anything past ~24h means a run was "
          "missed or failed.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 90000},
            {"color": "red", "value": 172800}]))
 panels.append(ts(
     "Job runs by status", ['sum by (status) (increase(webwork_job_runs_total[$__interval]))'],
-    "{{status}}", 12, y, w=12, h=4, dec=0,
+    "{{status}}", 15, y, w=9, h=4, dec=0,
     desc="Terminal status of each execution.", stack=True))
 
 # ── Traffic ──────────────────────────────────────────────────────
