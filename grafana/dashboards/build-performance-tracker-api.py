@@ -99,16 +99,25 @@ panels.append(ts(
     "Requests/s by route",
     [("sum by (route) (rate(http_request_duration_seconds_count[5m]))", "{{route}}")],
     0, y, w=12, unit="reqps",
-    desc="Rate per mounted route; concrete URLs never become labels. Unmatched requests "
-         "collapse into route=\"unmatched\".",
+    desc="Rate per mounted route; concrete URLs never become labels. A request that "
+         "matched no handler is route=\"unmatched\", and CORS preflight, which the cors "
+         "middleware answers before routing, is route=\"cors-preflight\". Preflight used "
+         "to land in unmatched and drown it: 697/s against 0.0/s of real 404s.",
     legend_calcs=["mean", "max"], minv=0))
 panels.append(ts(
     "Latency p50 / p95 / p99",
-    [("histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))", "p50"),
-     ("histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))", "p95"),
-     ("histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))", "p99")],
+    [("histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket"
+      "{route!=\"cors-preflight\"}[5m])))", "p50"),
+     ("histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket"
+      "{route!=\"cors-preflight\"}[5m])))", "p95"),
+     ("histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket"
+      "{route!=\"cors-preflight\"}[5m])))", "p99")],
     12, y, w=12, unit="s", minv=0,
-    desc="Percentiles over the histogram buckets, all routes combined."))
+    desc="Percentiles over the histogram buckets, every route that does work. CORS "
+         "preflight is excluded: it is answered in microseconds and there is more of it "
+         "than there is real traffic, so including it understated these. Measured at the "
+         "time of the change, it pulled p95 from 7.4s down to 4.5s and p50 from 28ms to "
+         "8ms, which reads as an API far faster than it is."))
 y += 8
 panels.append(ts(
     "5xx error rate",
@@ -116,9 +125,11 @@ panels.append(ts(
     # returns empty, painting "No data" — indistinguishable from a broken scrape,
     # in exactly the healthy case. The fallback renders zero errors as zero.
     [("(sum(rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) or vector(0)) "
-      "/ sum(rate(http_request_duration_seconds_count[5m]))", "5xx")],
+      "/ sum(rate(http_request_duration_seconds_count{route!=\"cors-preflight\"}[5m]))", "5xx")],
     0, y, w=12, h=6, unit="percentunit",
-    desc="Share of requests answered with 5xx. Phase 6 alert fires above 0.05.", minv=0))
+    desc="Share of requests answered with 5xx. CORS preflight is out of the denominator: "
+         "it never fails, so counting it dilutes the ratio by however much protocol "
+         "overhead happens to be flowing. Phase 6 alert fires above 0.05.", minv=0))
 panels.append(ts(
     "Requests/s by status",
     [("sum by (status_code) (rate(http_request_duration_seconds_count[5m]))", "{{status_code}}")],

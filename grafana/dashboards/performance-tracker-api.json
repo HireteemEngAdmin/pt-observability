@@ -297,7 +297,7 @@
     {
       "type": "timeseries",
       "title": "Requests/s by route",
-      "description": "Rate per mounted route; concrete URLs never become labels. Unmatched requests collapse into route=\"unmatched\".",
+      "description": "Rate per mounted route; concrete URLs never become labels. A request that matched no handler is route=\"unmatched\", and CORS preflight, which the cors middleware answers before routing, is route=\"cors-preflight\". Preflight used to land in unmatched and drown it: 697/s against 0.0/s of real 404s.",
       "id": 7,
       "gridPos": {
         "h": 8,
@@ -370,7 +370,7 @@
     {
       "type": "timeseries",
       "title": "Latency p50 / p95 / p99",
-      "description": "Percentiles over the histogram buckets, all routes combined.",
+      "description": "Percentiles over the histogram buckets, every route that does work. CORS preflight is excluded: it is answered in microseconds and there is more of it than there is real traffic, so including it understated these. Measured at the time of the change, it pulled p95 from 7.4s down to 4.5s and p50 from 28ms to 8ms, which reads as an API far faster than it is.",
       "id": 8,
       "gridPos": {
         "h": 8,
@@ -388,7 +388,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{route!=\"cors-preflight\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A",
           "editorMode": "code",
@@ -399,7 +399,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route!=\"cors-preflight\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B",
           "editorMode": "code",
@@ -410,7 +410,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{route!=\"cors-preflight\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C",
           "editorMode": "code",
@@ -462,7 +462,7 @@
     {
       "type": "timeseries",
       "title": "5xx error rate",
-      "description": "Share of requests answered with 5xx. Phase 6 alert fires above 0.05.",
+      "description": "Share of requests answered with 5xx. CORS preflight is out of the denominator: it never fails, so counting it dilutes the ratio by however much protocol overhead happens to be flowing. Phase 6 alert fires above 0.05.",
       "id": 9,
       "gridPos": {
         "h": 6,
@@ -480,7 +480,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_request_duration_seconds_count[5m]))",
+          "expr": "(sum(rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_request_duration_seconds_count{route!=\"cors-preflight\"}[5m]))",
           "legendFormat": "5xx",
           "refId": "A",
           "editorMode": "code",
