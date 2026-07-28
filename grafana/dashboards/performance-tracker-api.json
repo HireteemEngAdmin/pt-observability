@@ -1139,6 +1139,63 @@
         },
         "overrides": []
       }
+    },
+    {
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "id": 20,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "logs",
+      "title": "Errors and warnings",
+      "id": 21,
+      "description": "All of stderr, plus anything on stdout matching error/warn. Level filtering is heuristic while the backend still logs through console.* \u2014 see docs/superpowers/specs/2026-07-28-loki-logs-design.md. filename tells the two clustered API instances apart (server-out-8 vs server-out-9).",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{stream=\"err\"}",
+          "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{stream=\"out\"} |~ \"(?i)(error|warn)\"",
+          "refId": "B",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
     }
   ],
   "templating": {

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Instala o node_exporter como servico systemd na EC2 da aplicacao, com TLS +
-# basic auth (a porta 9100 fica aberta em 0.0.0.0/0 no security group, entao o
-# conteudo precisa ser ilegivel sem credencial).
+# Install node_exporter as a systemd service on the application EC2, with TLS
+# and basic auth. Port 9100 is open to 0.0.0.0/0 in the security group, so the
+# content has to be unreadable without a credential.
 #
-# Uso:
+# Usage:
 #   NODE_EXPORTER_BCRYPT='$2b$12$...' PUBLIC_DNS=ec2-x.compute-1.amazonaws.com \
-#     ./install-node-exporter.sh [versao]     (versao default 1.9.1)
+#     ./install-node-exporter.sh [version]     (version defaults to 1.9.1)
 #
-# O hash bcrypt vem do README (secao "node_exporter na EC2"); a senha em claro
-# fica em secrets/ no host do stack e nunca chega aqui.
+# The bcrypt hash comes from the README section "node_exporter on the EC2"; the
+# plaintext password stays in secrets/ on the stack host and never reaches here.
 set -euo pipefail
 
 VERSION="${1:-1.9.1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-: "${NODE_EXPORTER_BCRYPT:?defina NODE_EXPORTER_BCRYPT com o hash bcrypt da senha}"
-: "${PUBLIC_DNS:?defina PUBLIC_DNS com o DNS publico da EC2 (SAN do certificado)}"
+: "${NODE_EXPORTER_BCRYPT:?set NODE_EXPORTER_BCRYPT to the password's bcrypt hash}"
+: "${PUBLIC_DNS:?set PUBLIC_DNS to the EC2 public DNS (the certificate SAN)}"
 PUBLIC_IP="$(curl -fsS --max-time 5 https://api.ipify.org || true)"
 
 cd /tmp
@@ -23,8 +23,8 @@ tar xzf "node_exporter-${VERSION}.linux-amd64.tar.gz"
 sudo mv "node_exporter-${VERSION}.linux-amd64/node_exporter" /usr/local/bin/
 id -u node_exporter >/dev/null 2>&1 || sudo useradd -rs /bin/false node_exporter
 
-# Certificado autoassinado; o SAN precisa bater com o target do prometheus.yml,
-# que pina este cert como CA (sem insecure_skip_verify).
+# Self-signed certificate. The SAN must match the target in prometheus.yml,
+# which pins this cert as its CA instead of using insecure_skip_verify.
 sudo mkdir -p /etc/node_exporter
 sudo openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -keyout /etc/node_exporter/node_exporter.key \
@@ -49,14 +49,14 @@ sudo cp "${DIR}/node_exporter.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now node_exporter
 
-echo "--- validacao ---"
-# systemctl --now retorna antes do socket estar pronto; sem a espera o curl sai
-# vazio e a validacao "passa" mesmo com o servico quebrado.
+echo "--- validation ---"
+# systemctl --now returns before the socket is ready; without the wait the curl
+# comes back empty and the check "passes" even on a broken service.
 for _ in $(seq 10); do
   curl -sk --max-time 3 https://localhost:9100/metrics >/dev/null 2>&1 && break
   sleep 1
 done
 code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost:9100/metrics || true)"
-[ "$code" = "401" ] || { echo "FALHOU: esperava 401 sem credencial, veio '${code}'"; exit 1; }
-echo "OK: TLS ativo e basic auth exigindo credencial (401)"
-echo "Copie /etc/node_exporter/node_exporter.crt para prometheus/node_exporter-ca.crt no repo do stack."
+[ "$code" = "401" ] || { echo "FAILED: expected 401 without a credential, got '${code}'"; exit 1; }
+echo "OK: TLS active and basic auth demanding a credential (401)"
+echo "Copy /etc/node_exporter/node_exporter.crt to prometheus/node_exporter-ca.crt in the stack repo."

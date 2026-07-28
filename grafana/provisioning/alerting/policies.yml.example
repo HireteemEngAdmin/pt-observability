@@ -1,5 +1,5 @@
-# FASE FUTURA (alertas): renomear para policies.yml junto com o
-# contactpoints.yml.example (ver instrucoes la).
+# FUTURE PHASE (alerting): rename to policies.yml together with
+# contactpoints.yml.example (instructions are there).
 apiVersion: 1
 policies:
   - orgId: 1

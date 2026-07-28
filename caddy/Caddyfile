@@ -1,3 +1,14 @@
 {$GRAFANA_DOMAIN} {
-    reverse_proxy grafana:3000
+    # Alloy's log push. Must come before the catch-all handle: without it
+    # Grafana claims the route and answers 302 to /login instead of 401.
+    handle /loki/* {
+        basic_auth {
+            {$LOKI_PUSH_USER} {$LOKI_PUSH_BCRYPT}
+        }
+        reverse_proxy loki:3100
+    }
+
+    handle {
+        reverse_proxy grafana:3000
+    }
 }

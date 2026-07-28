@@ -1,13 +1,15 @@
-# Targets apontam para a EC2 da aplicacao (DNS publico estavel/EIP, nunca IP
-# efemero) e sao os mesmos independente de onde este stack rodar. DNS publico
-# nao e segredo: fica commitado.
+# Targets point at the application EC2 through its stable public DNS / EIP,
+# never an ephemeral IP, and stay the same wherever this stack runs. A public
+# DNS name is not a secret, so it is committed.
 #
-# As 3 portas de metrica ficam abertas em 0.0.0.0/0 no security group (decisao
-# de nao colocar o IP do host de observabilidade nas regras da AWS). Logo:
-# - api :3000 e cron :9464 servem metricas de aplicacao sem auth, como a API ja
-#   fazia antes deste stack existir.
-# - node :9100 exporia kernel, IP privado e topologia do host, entao roda com
-#   TLS + basic auth (node_exporter --web.config.file). Ver README.
+# All three metric ports are open to 0.0.0.0/0 in the security group — the
+# decision was to keep the observability host's IP out of the AWS rules.
+# Consequences per port:
+# - api :3000 and cron :9464 serve application metrics without auth, which is
+#   what the API already did before this stack existed.
+# - node :9100 would expose the kernel version, the private IP and the host
+#   topology, so it runs behind TLS and basic auth
+#   (node_exporter --web.config.file). See the README.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -16,7 +18,7 @@ scrape_configs:
   - job_name: api
     metrics_path: /metrics
     static_configs:
-      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:3000'] # porta real da API (Fase 0 do plano)
+      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:3000']
 
   - job_name: cron
     static_configs:
@@ -26,11 +28,12 @@ scrape_configs:
     scheme: https
     basic_auth:
       username: prometheus
-      # Arquivo montado pelo compose a partir de ./secrets (fora do git).
+      # Mounted by compose from ./secrets, which is outside git.
       password_file: /etc/prometheus/secrets/node_exporter_password
     tls_config:
-      # Cert autoassinado da EC2 pinado como CA, em vez de insecure_skip_verify:
-      # assim o scrape falha se alguem trocar o certificado no meio do caminho.
+      # The EC2's self-signed cert is pinned as the CA rather than using
+      # insecure_skip_verify, so the scrape fails if the certificate is swapped
+      # in transit instead of silently accepting it.
       ca_file: /etc/prometheus/node_exporter-ca.crt
       server_name: ec2-44-220-173-115.compute-1.amazonaws.com
     static_configs:
