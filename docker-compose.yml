@@ -50,6 +50,9 @@ services:
     restart: unless-stopped
     environment:
       - GRAFANA_DOMAIN=${GRAFANA_DOMAIN}
+      # Basic auth do endpoint de push do Loki (hash bcrypt; senha em secrets/).
+      - LOKI_PUSH_USER=${LOKI_PUSH_USER}
+      - LOKI_PUSH_BCRYPT=${LOKI_PUSH_BCRYPT}
     ports:
       - "80:80"
       - "443:443"
