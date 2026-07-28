@@ -14,16 +14,18 @@ Observabilidade Performance Tracker" no Notion.
 ## Estrutura
 
 ```
-docker-compose.yml            # prometheus + grafana + caddy (TLS automatico)
+docker-compose.yml            # prometheus + loki + grafana + caddy (TLS automatico)
 .env.example                  # copiar para .env (nunca commitado)
-caddy/Caddyfile               # dominio via env GRAFANA_DOMAIN
+secrets/                      # senhas e credenciais (NUNCA commitado)
+caddy/Caddyfile               # dominio via env; roteia /loki/* com basic auth
 prometheus/prometheus.yml     # scrape configs (targets = EC2 da aplicacao)
+loki/loki-config.yml          # storage em disco, retencao 30d
 grafana/provisioning/
-  datasources/                # datasource Prometheus
+  datasources/                # datasources Prometheus e Loki
   dashboards/                 # provider: carrega ../dashboards/*.json
   alerting/                   # templates .example p/ Teams (fase futura)
-grafana/dashboards/           # JSONs dos dashboards (versionados)
-ec2-exporters/                # instalacao do node_exporter na EC2 da aplicacao
+grafana/dashboards/           # JSONs dos dashboards + o gerador do custom
+ec2-exporters/                # node_exporter (metricas) e alloy (logs) na EC2
 scripts/                      # backup/restore dos volumes (migracao de host)
 ```
 
@@ -152,17 +154,23 @@ Instalacao do agente na EC2: ver `ec2-exporters/install-alloy.sh`.
 
 ## Migracao para outro host (ex.: EC2 dedicada)
 
-O scrape e pull: na EC2 da aplicacao nada muda alem de uma regra de SG.
+O scrape de metricas e pull: na EC2 nada muda alem de uma regra de SG. Os logs
+sao push, entao a EC2 precisa de um passo a mais (item 5).
 
 1. Provisionar o host novo com Docker + compose; apontar o DNS A do
    `GRAFANA_DOMAIN` para o IP novo (Caddy reemite o certificado sozinho).
-2. Clonar o repo e copiar o `.env` (segredos vem do gerenciador de senhas).
-3. **Mantendo o historico**: no host antigo, `docker compose stop prometheus grafana`,
+2. Clonar o repo e copiar `.env` e o diretorio `secrets/` inteiro (segredos vem
+   do gerenciador de senhas; `secrets/` nao esta no git).
+3. **Mantendo o historico**: no host antigo, `docker compose stop prometheus loki grafana`,
    rodar `scripts/backup-volumes.sh`, copiar `backup/` para o host novo e rodar
    `scripts/restore-volumes.sh` la. **Sem historico**: pular; dashboards e alertas
-   vem do git, perde-se apenas o TSDB.
-4. No SG da EC2 da aplicacao: trocar o /32 antigo pelo IP do host novo nas 3
-   portas de metrica (se o host novo estiver na mesma VPC, usar referencia de SG
-   e IP privado no lugar de IP publico).
-5. `docker compose up -d` no host novo; validar targets up + login no Grafana.
-6. `docker compose down` no host antigo.
+   vem do git, perde-se o TSDB e os logs.
+4. No SG da EC2 da aplicacao: as 3 portas de metrica estao em `0.0.0.0/0`, entao
+   nada muda (se o host novo estiver na MESMA VPC, vale trocar por referencia de
+   SG + IP privado e fechar a exposicao publica).
+5. Na EC2, apontar o Alloy para o dominio novo se ele mudar: editar o `url` em
+   `/etc/alloy/config.alloy` e `systemctl restart alloy`. Se o `GRAFANA_DOMAIN`
+   for o mesmo, nada a fazer — o push segue o DNS.
+6. `docker compose up -d --force-recreate` no host novo; validar targets up,
+   login no Grafana e log chegando (`{job="cron"}` no Explore).
+7. `docker compose down` no host antigo.
