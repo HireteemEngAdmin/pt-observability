@@ -181,7 +181,13 @@ dashboard = {
             # actual removal, so without this filter they sit in the dropdown for as
             # long as their chunks survive.
             "regex": "^(server|cron)$",
-            "multi": True, "includeAll": True, "allValue": ".*",
+            # ".+" and not ".*". Loki rejects a selector whose every matcher can
+            # match the empty string, and both of the labels used here are
+            # variables with an All option. With All selected on both, ".*"
+            # produced {job=~".*", stream=~".*"} and Loki refused the whole
+            # query, so the panel showed nothing at all rather than showing
+            # everything. ".+" still matches every job, since none is unlabelled.
+            "multi": True, "includeAll": True, "allValue": ".+",
             "current": {"text": ["All"], "value": ["$__all"]}, "refresh": 1,
         },
         {
@@ -197,7 +203,8 @@ dashboard = {
             # dashboard. Both streams by default, and the level filter below is what
             # cuts the volume.
             "current": {"text": ["All"], "value": ["$__all"]},
-            "multi": True, "includeAll": True, "allValue": ".*",
+            # See the note on the job variable: this one is in the selector too.
+            "multi": True, "includeAll": True, "allValue": ".+",
         },
         {
             "name": "level", "label": "Level", "type": "custom",
@@ -220,6 +227,39 @@ dashboard = {
     ]},
     "annotations": {"list": []},
 }
+
+# Loki requires at least one matcher in a stream selector that cannot match the
+# empty string. A dashboard whose selector is built entirely from All-able
+# variables violates that only when someone selects All, so it cannot be caught
+# by reading the JSON. Checking the generated values here is what makes it
+# visible at build time.
+EMPTY_COMPATIBLE = {".*", "", ".*?"}
+
+
+def assert_selectors_cannot_be_empty(dash):
+    by_name = {v["name"]: v for v in dash["templating"]["list"]}
+    for panel in dash["panels"]:
+        for target in panel.get("targets", []):
+            expr = target.get("expr", "")
+            if not expr.startswith("{"):
+                continue
+            selector = expr[1:expr.index("}")]
+            resolved = []
+            for part in selector.split(","):
+                value = part.split("=", 1)[1].strip().strip('"~= ')
+                if value.startswith("$"):
+                    var = by_name.get(value[1:])
+                    value = var.get("allValue", "") if var else ""
+                resolved.append(value)
+            if all(v in EMPTY_COMPATIBLE for v in resolved):
+                raise SystemExit(
+                    f"panel {panel.get('title')!r}: every matcher in its stream "
+                    f"selector can match empty ({resolved}). Loki rejects the "
+                    "whole query and the panel renders blank."
+                )
+
+
+assert_selectors_cannot_be_empty(dashboard)
 
 with open("grafana/dashboards/logs.json", "w") as f:
     json.dump(dashboard, f, indent=2)
