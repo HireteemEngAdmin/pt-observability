@@ -136,10 +136,19 @@ y = 0
 panels.append(row("Overview", y))
 y += 1
 panels.append(stat(
-    "Integration status", 'min(webwork_up{job=~"$job"})', 0, y, w=3,
-    desc="Reflects the last call each process actually made. It does not decay with silence: "
-         "no traffic holds the last known state instead of reporting an outage. Empty until "
-         "the first call after a restart.",
+    "Integration status",
+    # Whichever observation is most recent wins, across every process. min(webwork_up)
+    # was wrong twice over: the cron only calls WebWork at 03:00, so for the rest of
+    # the day it dragged the panel to DOWN, and even after that a failure from hours
+    # ago outvoted a success from seconds ago. The presence guard keeps "nobody has
+    # called yet" as No data rather than DOWN.
+    '((max(webwork_last_success_timestamp_seconds) or vector(0)) >= bool '
+    '(max(webwork_last_failure_timestamp_seconds) or vector(0))) '
+    'and on() (count(webwork_up) > 0)',
+    0, y, w=3,
+    desc="State of the most recent call across all processes. It does not decay with silence: "
+         "no traffic holds the last known state instead of reporting an outage, and shows "
+         "No data until the first call rather than DOWN.",
     mappings=UP_MAP,
     steps=[{"color": "red", "value": None}, {"color": "green", "value": 1}]))
 panels.append(stat(

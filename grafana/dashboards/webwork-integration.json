@@ -34,7 +34,7 @@
     {
       "type": "stat",
       "title": "Integration status",
-      "description": "Reflects the last call each process actually made. It does not decay with silence: no traffic holds the last known state instead of reporting an outage. Empty until the first call after a restart.",
+      "description": "State of the most recent call across all processes. It does not decay with silence: no traffic holds the last known state instead of reporting an outage, and shows No data until the first call rather than DOWN.",
       "id": 2,
       "gridPos": {
         "h": 4,
@@ -52,7 +52,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "min(webwork_up{job=~\"$job\"})",
+          "expr": "((max(webwork_last_success_timestamp_seconds) or vector(0)) >= bool (max(webwork_last_failure_timestamp_seconds) or vector(0))) and on() (count(webwork_up) > 0)",
           "refId": "A",
           "editorMode": "code",
           "range": false,
