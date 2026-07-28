@@ -9,13 +9,14 @@ backend/utils/instrumentCronJob.js, which reach Loki under job="cron".
 Four things this file gets right that are easy to get wrong, all of them
 verified against a Prometheus rather than reasoned about:
 
-1. `instance` arrives as `exported_instance`. cronjob_running declares a label
-   called `instance`, which collides with the target label Prometheus attaches
-   at scrape time. prometheus.yml sets no honor_labels, so the default applies
-   and the scraped label is renamed with an `exported_` prefix. Querying
-   `cronjob_running{instance="0"}` matches nothing, silently. Confirmed by
-   scraping this exact exposition into a throwaway Prometheus: the stored series
-   is `cronjob_running{exported_instance="0", instance="host:9464", job="cron"}`.
+1. The application instance is `instance_id`, not `instance`. Prometheus
+   attaches its own `instance` label naming the scrape target, so a metric
+   declaring that name collides with it: with honor_labels off the scraped one
+   is renamed to `exported_instance`, and a query for `instance="0"` matches
+   nothing, silently. cronjob_running first declared `instance` and was fixed at
+   the source to declare `instance_id` instead, so the label survives the scrape
+   and no dashboard has to say `exported_instance` forever. Verified by scraping
+   both versions of the exposition into a throwaway Prometheus.
 
 2. `trigger` is not a Prometheus label at all. instrumentCronJob puts it in the
    childLogger bindings, not in any metric's labelNames. So the trigger variable
@@ -46,8 +47,9 @@ LOKI = {"type": "loki", "uid": "loki"}
 SEL = 'environment=~"$environment", job_name=~"$job"'
 SEL_STATUS = SEL + ', status=~"$status"'
 SEL_ERR = SEL + ', error_type=~"$errortype"'
-# See note 1 in the module docstring. This is exported_instance, not instance.
-SEL_INST = SEL + ', exported_instance=~"$instance"'
+# See note 1 in the module docstring. instance_id is the application instance;
+# `instance` on these series is the scrape target and means something else.
+SEL_INST = SEL + ', instance_id=~"$instance"'
 
 # Loki panels pin job="cron" (note 3) and read the pino fields, not labels.
 # `| json | __error__=""` drops anything on the stream that is not our
@@ -357,15 +359,17 @@ y += 4
 panels.append({
     "type": "table", "title": "Jobs", "id": nid(),
     "description":
-        "One row per job, built by joining twelve instant queries on job_name. The "
+        "One row per job, built by joining eleven instant queries on job_name. The "
         "schedule column comes from cronjob_info, which is the only place the configured "
         "cron expression exists; it is joined rather than assumed, so a job that is "
         "registered but has never completed still gets a row with a schedule and empty "
-        "timestamps. \"Last duration\" is the mean over the trailing 15 minutes rather than "
-        "a true last value: cronjob_duration_seconds is a histogram and carries no per-run "
-        "figure, so for a job that ran once in that window this is exactly the last run's "
-        "duration and for a busier job it is the recent average. Mean and p95 cover the "
-        "dashboard's time range. Success rate excludes skipped and cancelled from its "
+        "timestamps. There is deliberately no \"last duration\" column: "
+        "cronjob_duration_seconds is a histogram and carries no per-run value, so anything "
+        "in that column would be an average over some window wearing the label of a single "
+        "run, and it would mean different things on different rows depending on how often "
+        "the job runs. Mean and p95 over the dashboard's time range are shown instead, and "
+        "the true duration of one specific run is on its cronjob.completed line in the Logs "
+        "section, as durationMs. Success rate excludes skipped and cancelled from its "
         "denominator and ignores $status, for the reason given on the Success rate stat. "
         "Click a job name to scope the whole dashboard to it.",
     "gridPos": {"h": 12, "w": 24, "x": 0, "y": y}, "datasource": PROM,
@@ -382,8 +386,9 @@ panels.append({
         f'max by (job_name) (cronjob_last_success_timestamp_seconds{{{SEL}}}) * 1000',
         f'max by (job_name) (cronjob_last_error_timestamp_seconds{{{SEL}}}) * 1000',
         f'time() - max by (job_name) (cronjob_last_run_timestamp_seconds{{{SEL}}})',
-        f'sum by (job_name) (increase(cronjob_duration_seconds_sum{{{SEL_STATUS}}}[15m]))'
-        f' / sum by (job_name) (increase(cronjob_duration_seconds_count{{{SEL_STATUS}}}[15m]))',
+        # G, H: mean and p95 over the dashboard range. Both are averages of many
+        # runs and are named as such; see the note above on why no column here
+        # claims to be a single run's duration.
         f'sum by (job_name) (increase(cronjob_duration_seconds_sum{{{SEL_STATUS}}}[$__range]))'
         f' / sum by (job_name) '
         f'(increase(cronjob_duration_seconds_count{{{SEL_STATUS}}}[$__range]))',
@@ -404,14 +409,14 @@ panels.append({
             "renameByName": {
                 "job_name": "Job", "schedule": "Schedule", "status": "Last status",
                 "Value #C": "Last run", "Value #D": "Last success", "Value #E": "Last error",
-                "Value #F": "Since last run", "Value #G": "Last duration",
-                "Value #H": "Mean duration", "Value #I": "p95 duration",
-                "Value #J": "Success rate", "Value #K": "Errors", "Value #L": "Running",
+                "Value #F": "Since last run", "Value #G": "Mean duration",
+                "Value #H": "p95 duration", "Value #I": "Success rate",
+                "Value #J": "Errors", "Value #K": "Running",
             },
             "indexByName": {
                 "job_name": 0, "schedule": 1, "status": 2, "Value #C": 3, "Value #D": 4,
                 "Value #E": 5, "Value #F": 6, "Value #G": 7, "Value #H": 8, "Value #I": 9,
-                "Value #J": 10, "Value #K": 11, "Value #L": 12,
+                "Value #J": 10, "Value #K": 11,
             },
         }},
     ],
@@ -435,8 +440,6 @@ panels.append({
             override("Last error", [{"id": "unit", "value": "dateTimeAsIso"}]),
             override("Since last run", [{"id": "unit", "value": "s"},
                                         {"id": "decimals", "value": 0}]),
-            override("Last duration", [{"id": "unit", "value": "s"},
-                                       {"id": "decimals", "value": 2}]),
             override("Mean duration", [{"id": "unit", "value": "s"},
                                        {"id": "decimals", "value": 2}]),
             override("p95 duration", [{"id": "unit", "value": "s"},
@@ -489,16 +492,16 @@ panels.append(ranked(
 panels.append(ts(
     "Concurrent runs",
     [f'sum by (job_name) (cronjob_concurrent_runs{{{SEL}}})',
-     f'sum by (job_name, exported_instance) (cronjob_running{{{SEL_INST}}})'],
-    ["{{job_name}} (process)", "{{job_name}} on instance {{exported_instance}}"],
+     f'sum by (job_name, instance_id) (cronjob_running{{{SEL_INST}}})'],
+    ["{{job_name}} (process)", "{{job_name}} on instance {{instance_id}}"],
     12, y, style="stepAfter", fill=10,
     desc="Two gauges for what looks like one number. cronjob_concurrent_runs is the "
-         "per-process total; cronjob_running carries the instance, so a job running on two "
-         "instances at once is visible instead of being averaged away. Note exported_instance: "
-         "the app's own `instance` label collides with the target label Prometheus attaches, "
-         "and with honor_labels off the scraped one is renamed. Querying instance=\"0\" here "
-         "returns nothing at all, silently. Drawn as steps because a gauge holds its value "
-         "between scrapes rather than sloping between them."))
+         "per-process total; cronjob_running carries the application instance, so a job "
+         "running on two instances at once is visible instead of being averaged away. That "
+         "label is instance_id, not instance: `instance` on these series is the scrape "
+         "target Prometheus attached, which is a different thing and is the same for every "
+         "job. Drawn as steps because a gauge holds its value between scrapes rather than "
+         "sloping between them."))
 y += 8
 panels.append(ts(
     "Skipped runs per hour by reason",
@@ -981,13 +984,13 @@ dashboard = {
             "current": {"text": ["All"], "value": ["$__all"]},
         },
         {
-            # exported_instance. See note 1 in the module docstring: the app's
-            # own `instance` label is renamed at scrape time, and enumerating
-            # `instance` here would list the scrape target address instead of
-            # the PM2 instance id. In Loki the same value is the instanceId
-            # field, which is why the log panels match on that.
+            # instance_id. See note 1 in the module docstring: enumerating
+            # `instance` here would list the scrape target address, which is the
+            # same for every job and is not what this filter is for. In Loki the
+            # same value is the instanceId field, which is why the log panels
+            # match on that.
             "name": "instance", "label": "Instance", "type": "query", "datasource": PROM,
-            "query": {"query": "label_values(cronjob_running, exported_instance)", "refId": "A"},
+            "query": {"query": "label_values(cronjob_running, instance_id)", "refId": "A"},
             "multi": True, "includeAll": True, "allValue": ".*",
             "current": {"text": ["All"], "value": ["$__all"]}, "refresh": 1,
         },
