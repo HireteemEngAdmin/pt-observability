@@ -249,8 +249,16 @@ its own, which is why the dashboard uses `min()` for status and `max()` for
 consecutive failures: one instance failing while another succeeds is a real
 distinction, not noise to average away.
 
-Logs reach Loki through Grafana Alloy with `module="webwork"` on every line, so
-`{module="webwork"} | json` is the entry point for any investigation. Fields:
+Logs reach Loki through Grafana Alloy with `module: "webwork"` on every line.
+That is a **field inside the pino JSON, not a Loki stream label** — the labels
+are `job`, `stream`, `host` and `filename` — so it has to be matched after the
+parser:
+
+```logql
+{job=~"server|cron"} | json | module = `webwork`
+```
+
+`{module="webwork"}` looks right and silently returns nothing. Fields:
 `endpoint`, `method`, `status_code`, `duration_ms`, `attempt`, `correlation_id`,
 `operation_id`, `job`, `job_execution_id`, `error_type`, `msg_sanitized`,
 `stack` (unexpected errors only), `rate_limited`, `retry_after_seconds`,

@@ -2038,7 +2038,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{module=\"webwork\"} | json | rate_limited = `true`",
+          "expr": "{job=~\"$job\"} | json | module = `webwork` | rate_limited = `true`",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -2373,7 +2373,7 @@
     {
       "type": "logs",
       "title": "WebWork logs",
-      "description": "Every WebWork log line carries module=\"webwork\", so this selector is the entry point for any investigation. Drop the outcome filter to see successes too.",
+      "description": "module is a field inside the pino JSON, not a Loki stream label \u2014 the labels are job, stream, host and filename \u2014 so it has to be matched after | json, never as {module=\"webwork\"}, which silently returns nothing. Drop the outcome filter to see successes too.",
       "id": 39,
       "gridPos": {
         "h": 12,
@@ -2391,7 +2391,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{module=\"webwork\"} | json | outcome =~ `error|failure`",
+          "expr": "{job=~\"$job\"} | json | module = `webwork` | outcome =~ `error|failure`",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -2939,7 +2939,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{module=\"webwork\"} | json | job != ``",
+          "expr": "{job=~\"$job\"} | json | module = `webwork` | job_execution_id != ``",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
