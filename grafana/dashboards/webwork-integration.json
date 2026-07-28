@@ -869,7 +869,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "interval": "1m"
     },
     {
       "type": "row",
@@ -905,7 +906,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__interval]))",
+          "expr": "sum(rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1054,7 +1055,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (endpoint) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__interval]))",
+          "expr": "sum by (endpoint) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1120,7 +1121,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__interval]))",
+          "expr": "sum by (status) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1186,7 +1187,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (method) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__interval]))",
+          "expr": "sum by (method) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"$status\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1329,7 +1330,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval])))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1341,7 +1342,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.90, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval])))",
+          "expr": "histogram_quantile(0.90, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval])))",
           "refId": "B",
           "editorMode": "code",
           "range": true,
@@ -1353,7 +1354,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval])))",
           "refId": "C",
           "editorMode": "code",
           "range": true,
@@ -1365,7 +1366,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(webwork_request_duration_seconds_bucket{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval])))",
           "refId": "D",
           "editorMode": "code",
           "range": true,
@@ -1377,7 +1378,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(webwork_request_duration_seconds_sum{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval])) / sum(rate(webwork_request_duration_seconds_count{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval]))",
+          "expr": "sum(rate(webwork_request_duration_seconds_sum{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval])) / sum(rate(webwork_request_duration_seconds_count{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval]))",
           "refId": "E",
           "editorMode": "code",
           "range": true,
@@ -1592,7 +1593,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(webwork_waiting_seconds_total[$__interval]))",
+          "expr": "sum(rate(webwork_waiting_seconds_total[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -1780,7 +1781,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "interval": "1m"
     },
     {
       "type": "bargauge",
@@ -2030,7 +2032,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (outcome) (rate(webwork_operation_attempts_count{endpoint=~\"$endpoint\"}[$__interval]))",
+          "expr": "sum by (outcome) (rate(webwork_operation_attempts_count{endpoint=~\"$endpoint\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -2144,7 +2146,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (error_type) (rate(webwork_errors_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__interval]))",
+          "expr": "sum by (error_type) (rate(webwork_errors_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -2360,7 +2362,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "interval": "1m"
     },
     {
       "type": "timeseries",
@@ -2383,7 +2386,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"4..|5..\"}[$__interval]))",
+          "expr": "sum by (status) (rate(webwork_requests_total{job=~\"$job\", endpoint=~\"$endpoint\", method=~\"$method\", status=~\"4..|5..\"}[$__rate_interval]))",
           "refId": "A",
           "editorMode": "code",
           "range": true,
@@ -2896,7 +2899,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "interval": "1m"
     },
     {
       "type": "timeseries",
