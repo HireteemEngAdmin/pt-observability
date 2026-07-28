@@ -297,7 +297,7 @@
     {
       "type": "timeseries",
       "title": "Requests/s por rota",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel.",
+      "description": "Taxa por rota montada; URLs concretas nao viram label.",
       "id": 7,
       "gridPos": {
         "h": 8,
@@ -370,7 +370,7 @@
     {
       "type": "timeseries",
       "title": "Latencia p50 / p95 / p99",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel.",
+      "description": "Percentis sobre os buckets do histograma, todas as rotas somadas.",
       "id": 8,
       "gridPos": {
         "h": 8,
@@ -462,7 +462,7 @@
     {
       "type": "timeseries",
       "title": "Taxa de erro 5xx",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel. Alerta da Fase 6 dispara em > 0.05.",
+      "description": "Fracao das requests que retornaram 5xx. Alerta da Fase 6 dispara em > 0.05.",
       "id": 9,
       "gridPos": {
         "h": 6,
@@ -480,7 +480,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) / sum(rate(http_request_duration_seconds_count[5m]))",
+          "expr": "(sum(rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_request_duration_seconds_count[5m]))",
           "legendFormat": "5xx",
           "refId": "A",
           "editorMode": "code",
@@ -532,7 +532,7 @@
     {
       "type": "timeseries",
       "title": "Requests/s por status",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel.",
+      "description": "Util para ver 4xx subindo antes de virar incidente.",
       "id": 10,
       "gridPos": {
         "h": 6,
@@ -615,7 +615,7 @@
     {
       "type": "timeseries",
       "title": "Event loop lag p99",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel. Alerta da Fase 6 dispara em > 0.2.",
+      "description": "Atraso do event loop por processo. Alerta da Fase 6 dispara em > 0.2.",
       "id": 12,
       "gridPos": {
         "h": 8,
@@ -685,7 +685,7 @@
     {
       "type": "timeseries",
       "title": "Heap usado",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel.",
+      "description": "Heap V8 em uso, por processo.",
       "id": 13,
       "gridPos": {
         "h": 8,
@@ -755,7 +755,7 @@
     {
       "type": "timeseries",
       "title": "Restarts por hora",
-      "description": "Requer o PR #445 (metricas http_*/nodejs_*) deployado na EC2. Vazio ate o deploy \u2014 nao e falha do painel. process_start_time_seconds muda quando o processo reinicia. Deploy tambem conta (pm2 restart). Alerta da Fase 6 dispara em > 3/h.",
+      "description": "process_start_time_seconds muda quando o processo reinicia. Deploy tambem conta (pm2 reload). Alerta da Fase 6 dispara em > 3/h.",
       "id": 14,
       "gridPos": {
         "h": 8,
