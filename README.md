@@ -95,8 +95,10 @@ mkdir -p secrets && umask 077
 openssl rand -base64 30 | tr -d '\n' > secrets/node_exporter_password
 python3 -c "import bcrypt;print(bcrypt.hashpw(open('secrets/node_exporter_password','rb').read(),bcrypt.gensalt(rounds=12)).decode())"
 # O container do Prometheus roda como nobody (uid 65534); sem este chown o
-# scrape do node falha com "permission denied", nao com erro de auth.
-sudo chown 65534:65534 secrets/node_exporter_password
+# scrape do node falha com "permission denied", nao com erro de auth. O
+# diretorio precisa ir junto: 700 do root impede o container de atravessa-lo,
+# mesmo com o arquivo dentro ja pertencendo ao uid certo.
+sudo chown 65534:65534 secrets secrets/node_exporter_password
 ```
 
 Na EC2, com o hash impresso acima:
