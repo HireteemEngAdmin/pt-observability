@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p backup
 
-for vol in pt-obs-prom-data pt-obs-grafana-data pt-obs-caddy-data; do
+for vol in pt-obs-prom-data pt-obs-grafana-data pt-obs-caddy-data pt-obs-loki-data; do
   echo "exportando ${vol}..."
   docker run --rm -v "${vol}":/data -v "${PWD}/backup":/backup alpine \
     tar czf "/backup/${vol}.tgz" -C /data .

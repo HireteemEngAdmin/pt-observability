@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-for vol in pt-obs-prom-data pt-obs-grafana-data pt-obs-caddy-data; do
+for vol in pt-obs-prom-data pt-obs-grafana-data pt-obs-caddy-data pt-obs-loki-data; do
   [ -f "backup/${vol}.tgz" ] || { echo "faltando backup/${vol}.tgz"; exit 1; }
   docker volume create "${vol}" >/dev/null
   echo "restaurando ${vol}..."

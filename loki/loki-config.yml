@@ -1,0 +1,45 @@
+# Single binary, storage em disco. Nada de multi-tenant: auth_enabled false, e o
+# acesso e controlado pelo basic auth do Caddy na borda.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-07-28
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 30 dias — decisao do time; os logs contem PII, nao aumentar sem discutir.
+  retention_period: 720h
+  # Os logs do PM2 podem chegar atrasados numa reinicializacao do Alloy.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  volume_enabled: true
+
+compactor:
+  working_directory: /loki/compactor
+  # Sem retention_enabled o retention_period acima e ignorado em silencio.
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  apply_retention_interval: 1h
