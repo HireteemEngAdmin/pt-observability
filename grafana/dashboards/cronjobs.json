@@ -404,7 +404,7 @@
       "type": "table",
       "title": "Jobs",
       "id": 8,
-      "description": "One row per job, built by joining twelve instant queries on job_name. The schedule column comes from cronjob_info, which is the only place the configured cron expression exists; it is joined rather than assumed, so a job that is registered but has never completed still gets a row with a schedule and empty timestamps. \"Last duration\" is the mean over the trailing 15 minutes rather than a true last value: cronjob_duration_seconds is a histogram and carries no per-run figure, so for a job that ran once in that window this is exactly the last run's duration and for a busier job it is the recent average. Mean and p95 cover the dashboard's time range. Success rate excludes skipped and cancelled from its denominator and ignores $status, for the reason given on the Success rate stat. Click a job name to scope the whole dashboard to it.",
+      "description": "One row per job, built by joining eleven instant queries on job_name. The schedule column comes from cronjob_info, which is the only place the configured cron expression exists; it is joined rather than assumed, so a job that is registered but has never completed still gets a row with a schedule and empty timestamps. There is deliberately no \"last duration\" column: cronjob_duration_seconds is a histogram and carries no per-run value, so anything in that column would be an average over some window wearing the label of a single run, and it would mean different things on different rows depending on how often the job runs. Mean and p95 over the dashboard's time range are shown instead, and the true duration of one specific run is on its cronjob.completed line in the Logs section, as durationMs. Success rate excludes skipped and cancelled from its denominator and ignores $status, for the reason given on the Success rate stat. Click a job name to scope the whole dashboard to it.",
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -498,7 +498,7 @@
           "instant": true,
           "range": false,
           "format": "table",
-          "expr": "sum by (job_name) (increase(cronjob_duration_seconds_sum{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[15m])) / sum by (job_name) (increase(cronjob_duration_seconds_count{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[15m]))"
+          "expr": "sum by (job_name) (increase(cronjob_duration_seconds_sum{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range])) / sum by (job_name) (increase(cronjob_duration_seconds_count{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range]))"
         },
         {
           "datasource": {
@@ -510,7 +510,7 @@
           "instant": true,
           "range": false,
           "format": "table",
-          "expr": "sum by (job_name) (increase(cronjob_duration_seconds_sum{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range])) / sum by (job_name) (increase(cronjob_duration_seconds_count{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range]))"
+          "expr": "histogram_quantile(0.95, sum by (le, job_name) (rate(cronjob_duration_seconds_bucket{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range])))"
         },
         {
           "datasource": {
@@ -522,7 +522,7 @@
           "instant": true,
           "range": false,
           "format": "table",
-          "expr": "histogram_quantile(0.95, sum by (le, job_name) (rate(cronjob_duration_seconds_bucket{environment=~\"$environment\", job_name=~\"$job\", status=~\"$status\"}[$__range])))"
+          "expr": "sum by (job_name) (increase(cronjob_runs_total{environment=~\"$environment\", job_name=~\"$job\", status=\"success\"}[$__range])) / clamp_min(sum by (job_name) (increase(cronjob_runs_total{environment=~\"$environment\", job_name=~\"$job\", status=~\"success|error|partial\"}[$__range])), 1)"
         },
         {
           "datasource": {
@@ -534,18 +534,6 @@
           "instant": true,
           "range": false,
           "format": "table",
-          "expr": "sum by (job_name) (increase(cronjob_runs_total{environment=~\"$environment\", job_name=~\"$job\", status=\"success\"}[$__range])) / clamp_min(sum by (job_name) (increase(cronjob_runs_total{environment=~\"$environment\", job_name=~\"$job\", status=~\"success|error|partial\"}[$__range])), 1)"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "refId": "K",
-          "editorMode": "code",
-          "instant": true,
-          "range": false,
-          "format": "table",
           "expr": "sum by (job_name) (increase(cronjob_errors_total{environment=~\"$environment\", job_name=~\"$job\", error_type=~\"$errortype\"}[$__range]))"
         },
         {
@@ -553,7 +541,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "refId": "L",
+          "refId": "K",
           "editorMode": "code",
           "instant": true,
           "range": false,
@@ -598,12 +586,11 @@
               "Value #D": "Last success",
               "Value #E": "Last error",
               "Value #F": "Since last run",
-              "Value #G": "Last duration",
-              "Value #H": "Mean duration",
-              "Value #I": "p95 duration",
-              "Value #J": "Success rate",
-              "Value #K": "Errors",
-              "Value #L": "Running"
+              "Value #G": "Mean duration",
+              "Value #H": "p95 duration",
+              "Value #I": "Success rate",
+              "Value #J": "Errors",
+              "Value #K": "Running"
             },
             "indexByName": {
               "job_name": 0,
@@ -617,8 +604,7 @@
               "Value #H": 8,
               "Value #I": 9,
               "Value #J": 10,
-              "Value #K": 11,
-              "Value #L": 12
+              "Value #K": 11
             }
           }
         }
@@ -783,22 +769,6 @@
               {
                 "id": "decimals",
                 "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last duration"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "s"
-              },
-              {
-                "id": "decimals",
-                "value": 2
               }
             ]
           },
@@ -1160,7 +1130,7 @@
     {
       "type": "timeseries",
       "title": "Concurrent runs",
-      "description": "Two gauges for what looks like one number. cronjob_concurrent_runs is the per-process total; cronjob_running carries the instance, so a job running on two instances at once is visible instead of being averaged away. Note exported_instance: the app's own `instance` label collides with the target label Prometheus attaches, and with honor_labels off the scraped one is renamed. Querying instance=\"0\" here returns nothing at all, silently. Drawn as steps because a gauge holds its value between scrapes rather than sloping between them.",
+      "description": "Two gauges for what looks like one number. cronjob_concurrent_runs is the per-process total; cronjob_running carries the application instance, so a job running on two instances at once is visible instead of being averaged away. That label is instance_id, not instance: `instance` on these series is the scrape target Prometheus attached, which is a different thing and is the same for every job. Drawn as steps because a gauge holds its value between scrapes rather than sloping between them.",
       "id": 13,
       "gridPos": {
         "h": 8,
@@ -1190,12 +1160,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (job_name, exported_instance) (cronjob_running{environment=~\"$environment\", job_name=~\"$job\", exported_instance=~\"$instance\"})",
+          "expr": "sum by (job_name, instance_id) (cronjob_running{environment=~\"$environment\", job_name=~\"$job\", instance_id=~\"$instance\"})",
           "refId": "B",
           "editorMode": "code",
           "range": true,
           "instant": false,
-          "legendFormat": "{{job_name}} on instance {{exported_instance}}"
+          "legendFormat": "{{job_name}} on instance {{instance_id}}"
         }
       ],
       "options": {
@@ -3730,7 +3700,7 @@
           "uid": "prometheus"
         },
         "query": {
-          "query": "label_values(cronjob_running, exported_instance)",
+          "query": "label_values(cronjob_running, instance_id)",
           "refId": "A"
         },
         "multi": true,
