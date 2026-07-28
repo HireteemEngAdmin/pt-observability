@@ -1,0 +1,16 @@
+# FASE FUTURA (alertas, apos aprovacao do manager). Para ativar:
+# 1. Criar o webhook do canal do Teams via Workflows/Power Automate
+#    (os connectors classicos do O365 foram descontinuados pela Microsoft).
+# 2. Adicionar TEAMS_WEBHOOK_URL ao .env e ao environment do grafana
+#    no docker-compose.yml.
+# 3. Renomear este arquivo para contactpoints.yml (e o policies.yml.example
+#    para policies.yml) e rodar: docker compose up -d
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: teams-pt-alerts
+    receivers:
+      - uid: teams-pt-alerts
+        type: teams
+        settings:
+          url: $TEAMS_WEBHOOK_URL

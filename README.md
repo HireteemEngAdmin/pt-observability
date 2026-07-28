@@ -21,7 +21,7 @@ prometheus/prometheus.yml     # scrape configs (targets = EC2 da aplicacao)
 grafana/provisioning/
   datasources/                # datasource Prometheus
   dashboards/                 # provider: carrega ../dashboards/*.json
-  alerting/                   # contact point Slack + notification policy
+  alerting/                   # templates .example p/ Teams (fase futura)
 grafana/dashboards/           # JSONs dos dashboards (versionados)
 ec2-exporters/                # instalacao do node_exporter na EC2 da aplicacao
 scripts/                      # backup/restore dos volumes (migracao de host)
@@ -32,7 +32,7 @@ scripts/                      # backup/restore dos volumes (migracao de host)
 ```bash
 git clone <url-deste-repo> /opt/observability
 cd /opt/observability
-cp .env.example .env   # preencher senha do Grafana, dominio e webhook do Slack
+cp .env.example .env   # preencher senha do Grafana e dominio
 docker compose up -d
 ```
 
@@ -52,8 +52,23 @@ migracao de host perde tudo:
   e commitar. O provisioning recarrega sozinho.
 - **Alert rules**: Alerting > Alert rules > Export > YAML, salvar em
   `grafana/provisioning/alerting/` e commitar.
-- Datasource, contact point e policy ja sao provisionados por arquivo; nao criar
-  duplicados na UI.
+- Datasource ja e provisionado por arquivo; nao criar duplicado na UI. Contact
+  point e policy entram na fase de alertas (secao abaixo).
+
+## Alertas (fase futura, apos aprovacao do manager)
+
+O nucleo sobe sem notificacoes: dashboards mostram o estado, ninguem e notificado.
+Quando a feature for aprovada:
+
+1. Criar o webhook do canal do Microsoft Teams via Workflows/Power Automate
+   ("When a Teams webhook request is received"); os connectors classicos do O365
+   foram descontinuados pela Microsoft.
+2. Adicionar `TEAMS_WEBHOOK_URL` ao `.env` e descomentar a linha correspondente
+   no `docker-compose.yml` (environment do grafana).
+3. Renomear os `.example` de `grafana/provisioning/alerting/` para `.yml` e rodar
+   `docker compose up -d`.
+4. Criar as regras de alerta (tabela na pagina do Notion), testar fire + resolve
+   e exportar o YAML das regras de volta para o repo.
 
 ## node_exporter na EC2 da aplicacao
 

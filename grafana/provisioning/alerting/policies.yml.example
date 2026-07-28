@@ -1,0 +1,7 @@
+# FASE FUTURA (alertas): renomear para policies.yml junto com o
+# contactpoints.yml.example (ver instrucoes la).
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: teams-pt-alerts
+    group_by: ['alertname']
