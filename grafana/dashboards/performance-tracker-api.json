@@ -1,7 +1,7 @@
 {
   "uid": "pt-api",
   "title": "Performance Tracker API",
-  "description": "Metricas de aplicacao do Performance Tracker (jobs api e cron). Host da EC2 fica no dashboard Node Exporter Full.",
+  "description": "Application metrics for the Performance Tracker (api and cron jobs). EC2 host metrics live in the Node Exporter Full dashboard.",
   "tags": [
     "performance-tracker",
     "observability"
@@ -18,7 +18,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "Saude geral",
+      "title": "Health",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -31,8 +31,8 @@
     },
     {
       "type": "stat",
-      "title": "Targets UP",
-      "description": "Quantos dos 3 jobs (api, cron, node) o Prometheus consegue raspar.",
+      "title": "Targets up",
+      "description": "How many of the 3 jobs (api, cron, node) Prometheus can scrape.",
       "id": 2,
       "gridPos": {
         "h": 4,
@@ -98,8 +98,8 @@
     },
     {
       "type": "stat",
-      "title": "Fila: dead letter",
-      "description": "Eventos que esgotaram retry. max() porque o gauge e exposto pelos jobs api E cron (ambos consultam o mesmo Postgres); sum() dobraria o valor.",
+      "title": "Queue: dead letter",
+      "description": "Events that exhausted their retries. max() because the gauge is exposed by both the api and cron jobs, which query the same Postgres; sum() would double it.",
       "id": 3,
       "gridPos": {
         "h": 4,
@@ -161,8 +161,8 @@
     },
     {
       "type": "stat",
-      "title": "Fila: failed",
-      "description": "Aguardando retry. max() pelo mesmo motivo do dead letter.",
+      "title": "Queue: failed",
+      "description": "Awaiting retry. max() because the gauge is exposed by both the api and cron jobs, which query the same Postgres; sum() would double it.",
       "id": 4,
       "gridPos": {
         "h": 4,
@@ -224,8 +224,8 @@
     },
     {
       "type": "stat",
-      "title": "Fila: pending",
-      "description": "Recebidos, ainda nao processados. max() pelo mesmo motivo do dead letter.",
+      "title": "Queue: pending",
+      "description": "Received, not processed yet. max() because the gauge is exposed by both the api and cron jobs, which query the same Postgres; sum() would double it.",
       "id": 5,
       "gridPos": {
         "h": 4,
@@ -283,7 +283,7 @@
     },
     {
       "type": "row",
-      "title": "HTTP da API",
+      "title": "API HTTP",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -296,8 +296,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Requests/s por rota",
-      "description": "Taxa por rota montada; URLs concretas nao viram label.",
+      "title": "Requests/s by route",
+      "description": "Rate per mounted route; concrete URLs never become labels. Unmatched requests collapse into route=\"unmatched\".",
       "id": 7,
       "gridPos": {
         "h": 8,
@@ -369,8 +369,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Latencia p50 / p95 / p99",
-      "description": "Percentis sobre os buckets do histograma, todas as rotas somadas.",
+      "title": "Latency p50 / p95 / p99",
+      "description": "Percentiles over the histogram buckets, all routes combined.",
       "id": 8,
       "gridPos": {
         "h": 8,
@@ -461,8 +461,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Taxa de erro 5xx",
-      "description": "Fracao das requests que retornaram 5xx. Alerta da Fase 6 dispara em > 0.05.",
+      "title": "5xx error rate",
+      "description": "Share of requests answered with 5xx. Phase 6 alert fires above 0.05.",
       "id": 9,
       "gridPos": {
         "h": 6,
@@ -531,8 +531,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Requests/s por status",
-      "description": "Util para ver 4xx subindo antes de virar incidente.",
+      "title": "Requests/s by status",
+      "description": "Useful for spotting 4xx climbing before it turns into an incident.",
       "id": 10,
       "gridPos": {
         "h": 6,
@@ -601,7 +601,7 @@
     },
     {
       "type": "row",
-      "title": "Processos Node (api e cron)",
+      "title": "Node processes (api and cron)",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -615,7 +615,7 @@
     {
       "type": "timeseries",
       "title": "Event loop lag p99",
-      "description": "Atraso do event loop por processo. Alerta da Fase 6 dispara em > 0.2.",
+      "description": "Event loop delay per process. Phase 6 alert fires above 0.2.",
       "id": 12,
       "gridPos": {
         "h": 8,
@@ -684,8 +684,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Heap usado",
-      "description": "Heap V8 em uso, por processo.",
+      "title": "Heap used",
+      "description": "V8 heap in use, per process.",
       "id": 13,
       "gridPos": {
         "h": 8,
@@ -754,8 +754,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Restarts por hora",
-      "description": "process_start_time_seconds muda quando o processo reinicia. Deploy tambem conta (pm2 reload). Alerta da Fase 6 dispara em > 3/h.",
+      "title": "Restarts per hour",
+      "description": "process_start_time_seconds changes whenever the process restarts. Deploys count too (pm2 reload). Phase 6 alert fires above 3/h.",
       "id": 14,
       "gridPos": {
         "h": 8,
@@ -837,8 +837,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Filas ao longo do tempo",
-      "description": "max() deduplica: os gauges vem dos jobs api e cron com o mesmo valor.",
+      "title": "Queues over time",
+      "description": "max() deduplicates: the gauges arrive from both the api and cron jobs with the same value.",
       "id": 16,
       "gridPos": {
         "h": 8,
@@ -933,7 +933,7 @@
     {
       "type": "timeseries",
       "title": "Webhook processing p95",
-      "description": "Tempo de despacho do evento para o handler, por tipo.",
+      "description": "Time spent dispatching an event to its handler, by type.",
       "id": 17,
       "gridPos": {
         "h": 8,
@@ -1002,8 +1002,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Webhooks recebidos/s por tipo",
-      "description": "Emitido pelo job api (o webhook entra pela API).",
+      "title": "Webhooks received/s by type",
+      "description": "Emitted by the api job \u2014 webhooks come in through the API.",
       "id": 18,
       "gridPos": {
         "h": 8,
@@ -1072,8 +1072,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Eventos processados/s por status",
-      "description": "Emitido pelo job cron. status=failed subindo antecede crescimento do dead letter.",
+      "title": "Events processed/s by status",
+      "description": "Emitted by the cron job. status=failed climbing precedes dead letter growth.",
       "id": 19,
       "gridPos": {
         "h": 8,
