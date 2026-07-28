@@ -9,6 +9,10 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Cert autoassinado do node_exporter, pinado como CA no scrape do job node.
+      - ./prometheus/node_exporter-ca.crt:/etc/prometheus/node_exporter-ca.crt:ro
+      # Senha do basic auth do node_exporter (./secrets nao vai para o git).
+      - ./secrets:/etc/prometheus/secrets:ro
       - prom-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"

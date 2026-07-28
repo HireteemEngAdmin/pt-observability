@@ -1,0 +1,23 @@
+# Template do /etc/node_exporter/web-config.yml na EC2 da aplicacao.
+#
+# Por que existe: a porta 9100 fica aberta em 0.0.0.0/0 no security group, e o
+# node_exporter sem protecao entrega versao exata do kernel, IP privado, layout
+# de disco e interfaces de rede para qualquer um que varra a porta. TLS + basic
+# auth mantem a porta aberta e o conteudo ilegivel (401 para quem nao tem a
+# credencial).
+#
+# Este arquivo NAO e copiado automaticamente: o hash abaixo e um placeholder.
+# Para gerar o real (ver README, secao "node_exporter na EC2"):
+#
+#   openssl rand -base64 30 | tr -d '\n' > secrets/node_exporter_password
+#   python3 -c "import bcrypt;print(bcrypt.hashpw(open('secrets/node_exporter_password','rb').read(),bcrypt.gensalt(rounds=12)).decode())"
+#
+# A senha em claro fica em secrets/ (gitignored) e e lida pelo Prometheus via
+# password_file; so o hash bcrypt vai para a EC2.
+
+tls_server_config:
+  cert_file: /etc/node_exporter/node_exporter.crt
+  key_file: /etc/node_exporter/node_exporter.key
+
+basic_auth_users:
+  prometheus: $2b$12$SUBSTITUA_PELO_HASH_BCRYPT_GERADO

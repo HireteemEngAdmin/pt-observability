@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=node_exporter
 Group=node_exporter
-ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100 --web.config.file=/etc/node_exporter/web-config.yml
 Restart=on-failure
 
 [Install]

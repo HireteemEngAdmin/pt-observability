@@ -70,11 +70,51 @@ Quando a feature for aprovada:
 4. Criar as regras de alerta (tabela na pagina do Notion), testar fire + resolve
    e exportar o YAML das regras de volta para o repo.
 
+## Exposicao das portas de metrica
+
+As 3 portas ficam abertas em `0.0.0.0/0` no security group da EC2: optou-se por
+nao colocar o IP do host de observabilidade nas regras da AWS. Consequencia
+pratica, por porta:
+
+| Porta | Job | Protecao | Por que |
+|-------|-----|----------|---------|
+| 3000 | api | nenhuma | `/metrics` da API ja era publico antes deste stack |
+| 9464 | cron | nenhuma | mesma classe de dado que a 3000 ja expunha |
+| 9100 | node | **TLS + basic auth** | sem isso vazaria versao do kernel, IP privado e topologia do host para qualquer scanner |
+
+Restringir o `/metrics` publico da API (`METRICS_ALLOWED_IPS`) segue pendente na
+fase de codigo, no repo `performance-tracker`.
+
 ## node_exporter na EC2 da aplicacao
 
+Gere a senha e o hash no host do stack (a senha em claro nunca vai para a EC2
+nem para o git):
+
 ```bash
-cd ec2-exporters && ./install-node-exporter.sh
+mkdir -p secrets && umask 077
+openssl rand -base64 30 | tr -d '\n' > secrets/node_exporter_password
+python3 -c "import bcrypt;print(bcrypt.hashpw(open('secrets/node_exporter_password','rb').read(),bcrypt.gensalt(rounds=12)).decode())"
+# O container do Prometheus roda como nobody (uid 65534); sem este chown o
+# scrape do node falha com "permission denied", nao com erro de auth.
+sudo chown 65534:65534 secrets/node_exporter_password
 ```
+
+Na EC2, com o hash impresso acima:
+
+```bash
+NODE_EXPORTER_BCRYPT='<hash>' PUBLIC_DNS='<dns-publico-da-ec2>' \
+  ./install-node-exporter.sh
+```
+
+O script gera o certificado autoassinado, escreve o `web-config.yml` e valida
+que a porta responde 401 sem credencial. Por fim copie o certificado para o
+repo, que o Prometheus o pina como CA:
+
+```bash
+scp <ec2>:/etc/node_exporter/node_exporter.crt prometheus/node_exporter-ca.crt
+```
+
+Trocar a senha depois: repetir os dois blocos e `systemctl restart node_exporter`.
 
 ## Migracao para outro host (ex.: EC2 dedicada)
 

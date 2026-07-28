@@ -1,6 +1,13 @@
 # Targets apontam para a EC2 da aplicacao (DNS publico estavel/EIP, nunca IP
 # efemero) e sao os mesmos independente de onde este stack rodar. DNS publico
 # nao e segredo: fica commitado.
+#
+# As 3 portas de metrica ficam abertas em 0.0.0.0/0 no security group (decisao
+# de nao colocar o IP do host de observabilidade nas regras da AWS). Logo:
+# - api :3000 e cron :9464 servem metricas de aplicacao sem auth, como a API ja
+#   fazia antes deste stack existir.
+# - node :9100 exporia kernel, IP privado e topologia do host, entao roda com
+#   TLS + basic auth (node_exporter --web.config.file). Ver README.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -9,12 +16,22 @@ scrape_configs:
   - job_name: api
     metrics_path: /metrics
     static_configs:
-      - targets: ['SUBSTITUA_EC2_DNS_PUBLICO:3000'] # porta real da API (Fase 0 do plano)
+      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:3000'] # porta real da API (Fase 0 do plano)
 
   - job_name: cron
     static_configs:
-      - targets: ['SUBSTITUA_EC2_DNS_PUBLICO:9464']
+      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:9464']
 
   - job_name: node
+    scheme: https
+    basic_auth:
+      username: prometheus
+      # Arquivo montado pelo compose a partir de ./secrets (fora do git).
+      password_file: /etc/prometheus/secrets/node_exporter_password
+    tls_config:
+      # Cert autoassinado da EC2 pinado como CA, em vez de insecure_skip_verify:
+      # assim o scrape falha se alguem trocar o certificado no meio do caminho.
+      ca_file: /etc/prometheus/node_exporter-ca.crt
+      server_name: ec2-44-220-173-115.compute-1.amazonaws.com
     static_configs:
-      - targets: ['SUBSTITUA_EC2_DNS_PUBLICO:9100']
+      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:9100']
