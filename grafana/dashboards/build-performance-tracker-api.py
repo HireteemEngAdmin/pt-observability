@@ -178,6 +178,35 @@ panels.append(ts(
     12, y, w=12, unit="reqps", minv=0,
     desc="Emitted by the cron job. status=failed climbing precedes dead letter growth."))
 
+# ── Logs ─────────────────────────────────────────────────────────
+y += 8
+panels.append(row("Logs", y))
+y += 1
+panels.append({
+    "type": "logs", "title": "Errors and warnings", "id": nid(),
+    "description": "All of stderr, plus anything on stdout matching error/warn. Level filtering "
+                   "is heuristic while the backend still logs through console.* — see "
+                   "docs/superpowers/specs/2026-07-28-loki-logs-design.md. filename tells the two "
+                   "clustered API instances apart (server-out-8 vs server-out-9).",
+    "gridPos": {"h": 12, "w": 24, "x": 0, "y": y},
+    "datasource": {"type": "loki", "uid": "loki"},
+    # Two queries, not one. LogQL cannot `or` stream selectors together:
+    # `{stream="err"} or {stream="out"} |~ ...` is a parse error. The logs panel
+    # accepts several targets and merges them for display.
+    #   A: all of stderr, whether or not the text says "error" — the real
+    #      failures observed look like `[user-access] ... cron failed:`
+    #   B: only the stdout lines matching error/warn, else the whole
+    #      informational stream would drown the panel
+    "targets": [
+        {"datasource": {"type": "loki", "uid": "loki"},
+         "expr": '{stream="err"}', "refId": "A", "queryType": "range"},
+        {"datasource": {"type": "loki", "uid": "loki"},
+         "expr": '{stream="out"} |~ "(?i)(error|warn)"', "refId": "B", "queryType": "range"},
+    ],
+    "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending",
+                "enableLogDetails": True, "dedupStrategy": "none", "prettifyLogMessage": False},
+})
+
 dashboard = {
     "uid": "pt-api",
     "title": "Performance Tracker API",
