@@ -50,9 +50,13 @@ services:
     restart: unless-stopped
     environment:
       - GRAFANA_DOMAIN=${GRAFANA_DOMAIN}
-      # Basic auth do endpoint de push do Loki (hash bcrypt; senha em secrets/).
-      - LOKI_PUSH_USER=${LOKI_PUSH_USER}
-      - LOKI_PUSH_BCRYPT=${LOKI_PUSH_BCRYPT}
+    # Basic auth do push do Loki. NAO usar `environment` com ${...} aqui: o hash
+    # bcrypt tem a forma $2a$14$<salt>..., e o Compose interpola o $<salt> como
+    # variavel inexistente e o substitui por vazio — o hash chega mutilado no
+    # container, o Caddy aceita a config como valida e toda autenticacao falha
+    # com 401. `env_file` entrega o valor literal, sem interpolacao.
+    env_file:
+      - ./secrets/caddy.env
     ports:
       - "80:80"
       - "443:443"
