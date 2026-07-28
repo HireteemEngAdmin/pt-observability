@@ -66,8 +66,9 @@ def stat(title, expr, x, y, w=4, h=4, unit="short", desc="", steps=None, legend=
     }
 
 
-def ts(title, exprs, legend, x, y, w=12, h=8, unit="short", desc="", stack=False, dec=None):
-    return {
+def ts(title, exprs, legend, x, y, w=12, h=8, unit="short", desc="", stack=False, dec=None,
+       min_interval=None):
+    panel = {
         "type": "timeseries", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": PROM,
         "targets": prom(*exprs, legend=legend),
@@ -82,6 +83,14 @@ def ts(title, exprs, legend, x, y, w=12, h=8, unit="short", desc="", stack=False
             "color": {"mode": "palette-classic"},
         }, "overrides": []},
     }
+    # Grafana derives $__interval from the range and the panel width, and will
+    # happily go below the 15s scrape interval on a short range. A rate or an
+    # increase over a window holding fewer than two samples returns nothing, so
+    # the panel renders "No data" on 3h while working fine on 24h. This raises
+    # the floor so the window always spans several scrapes.
+    if min_interval:
+        panel["interval"] = min_interval
+    return panel
 
 
 def ranked(title, expr, label, x, y, w=12, h=8, unit="short", desc=""):
@@ -231,14 +240,14 @@ panels.append(stat(
 panels.append(ts(
     "Job runs by status", ['sum by (status) (increase(webwork_job_runs_total[$__interval]))'],
     "{{status}}", 15, y, w=9, h=4, dec=0,
-    desc="Terminal status of each execution.", stack=True))
+    desc="Terminal status of each execution.", stack=True, min_interval="1m"))
 
 # ── Traffic ──────────────────────────────────────────────────────
 y += 4
 panels.append(row("Traffic", y))
 y += 1
 panels.append(ts(
-    "Requests over time", [f'sum(rate(webwork_requests_total{{{SEL_STATUS}}}[$__interval]))'],
+    "Requests over time", [f'sum(rate(webwork_requests_total{{{SEL_STATUS}}}[$__rate_interval]))'],
     "requests/s", 0, y, w=12, unit="reqps",
     desc="Total call rate after the dashboard filters."))
 panels.append(ranked(
@@ -248,15 +257,15 @@ panels.append(ranked(
     desc="Call count per normalized endpoint over the selected range."))
 y += 8
 panels.append(ts(
-    "Requests by endpoint", [f'sum by (endpoint) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__interval]))'],
+    "Requests by endpoint", [f'sum by (endpoint) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__rate_interval]))'],
     "{{endpoint}}", 0, y, w=12, unit="reqps", stack=True))
 panels.append(ts(
-    "Requests by status code", [f'sum by (status) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__interval]))'],
+    "Requests by status code", [f'sum by (status) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__rate_interval]))'],
     "{{status}}", 12, y, w=12, unit="reqps", stack=True,
     desc="status=\"none\" means the call never got a response — a timeout or a socket failure."))
 y += 8
 panels.append(ts(
-    "Requests by HTTP method", [f'sum by (method) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__interval]))'],
+    "Requests by HTTP method", [f'sum by (method) (rate(webwork_requests_total{{{SEL_STATUS}}}[$__rate_interval]))'],
     "{{method}}", 0, y, w=12, unit="reqps", stack=True))
 panels.append({
     "type": "heatmap", "title": "Call volume by hour of day", "id": nid(),
@@ -279,12 +288,12 @@ panels.append(row("Performance", y))
 y += 1
 panels.append(ts(
     "Latency percentiles",
-    [f'histogram_quantile(0.50, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__interval])))',
-     f'histogram_quantile(0.90, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__interval])))',
-     f'histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__interval])))',
-     f'histogram_quantile(0.99, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__interval])))',
-     f'sum(rate(webwork_request_duration_seconds_sum{{{SEL}}}[$__interval])) '
-     f'/ sum(rate(webwork_request_duration_seconds_count{{{SEL}}}[$__interval]))'],
+    [f'histogram_quantile(0.50, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__rate_interval])))',
+     f'histogram_quantile(0.90, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__rate_interval])))',
+     f'histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__rate_interval])))',
+     f'histogram_quantile(0.99, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[$__rate_interval])))',
+     f'sum(rate(webwork_request_duration_seconds_sum{{{SEL}}}[$__rate_interval])) '
+     f'/ sum(rate(webwork_request_duration_seconds_count{{{SEL}}}[$__rate_interval]))'],
     ["p50", "p90", "p95", "p99", "mean"], 0, y, w=12, unit="s",
     desc="The mean is included because a percentile alone hides a bimodal distribution."))
 panels.append(ranked(
@@ -299,7 +308,7 @@ panels.append(ts(
     desc="Concurrency against WebWork. Sustained growth with no matching request rate means "
          "calls are hanging."))
 panels.append(ts(
-    "Time spent awaiting WebWork", [f'sum(rate(webwork_waiting_seconds_total[$__interval]))'],
+    "Time spent awaiting WebWork", [f'sum(rate(webwork_waiting_seconds_total[$__rate_interval]))'],
     "seconds per second", 8, y, w=8, dec=2,
     desc="Cumulative wait divided by wall clock. A value above 1 means calls overlap; it is "
          "effectively the average number of calls in flight."))
@@ -315,7 +324,7 @@ y += 1
 panels.append(ts(
     "HTTP 429 over time", ['sum by (endpoint) (increase(webwork_rate_limited_total{endpoint=~"$endpoint"}[$__interval]))'],
     "{{endpoint}}", 0, y, w=12, dec=0, stack=True,
-    desc="When these appear tells you which job or rush hit the ceiling."))
+    desc="When these appear tells you which job or rush hit the ceiling.", min_interval="1m"))
 panels.append(ranked(
     "Endpoints hit hardest by rate limiting",
     'topk(10, sum by (endpoint) (increase(webwork_rate_limited_total{endpoint=~"$endpoint"}[$__range])))',
@@ -337,7 +346,7 @@ panels.append(ts(
          "client has no retry. A caller retrying shows up here too."))
 panels.append(ts(
     "Operations settled, by outcome",
-    ['sum by (outcome) (rate(webwork_operation_attempts_count{endpoint=~"$endpoint"}[$__interval]))'],
+    ['sum by (outcome) (rate(webwork_operation_attempts_count{endpoint=~"$endpoint"}[$__rate_interval]))'],
     "{{outcome}}", 16, y, w=8, dec=2, stack=True))
 y += 8
 panels.append(logs(
@@ -351,7 +360,7 @@ y += 10
 panels.append(row("Errors", y))
 y += 1
 panels.append(ts(
-    "Errors over time", [f'sum by (error_type) (rate(webwork_errors_total{{{SEL}}}[$__interval]))'],
+    "Errors over time", [f'sum by (error_type) (rate(webwork_errors_total{{{SEL}}}[$__rate_interval]))'],
     "{{error_type}}", 0, y, w=12, dec=2, stack=True,
     desc="http_4xx / http_5xx / rate_limited / timeout / connection / unexpected."))
 panels.append(ranked(
@@ -366,10 +375,10 @@ panels.append(ts(
      'sum(increase(webwork_errors_total{error_type="unexpected"}[$__interval])) or vector(0)'],
     ["timeout", "connection", "unexpected"], 0, y, w=12, dec=0, stack=True,
     desc="Failures with no HTTP response. The client sets no timeout, so a \"timeout\" here is "
-         "undici's own default rather than a deadline we chose."))
+         "undici's own default rather than a deadline we chose.", min_interval="1m"))
 panels.append(ts(
     "Errors by status code",
-    [f'sum by (status) (rate(webwork_requests_total{{{SEL}, status=~"4..|5.."}}[$__interval]))'],
+    [f'sum by (status) (rate(webwork_requests_total{{{SEL}, status=~"4..|5.."}}[$__rate_interval]))'],
     "{{status}}", 12, y, w=12, unit="reqps", stack=True))
 y += 8
 panels.append(logs(
@@ -404,7 +413,7 @@ panels.append(stat(
 y += 4
 panels.append(ts(
     "Records handled per run", ['sum by (outcome) (increase(webwork_job_records_total[$__interval]))'],
-    "{{outcome}}", 0, y, w=12, dec=0, stack=True))
+    "{{outcome}}", 0, y, w=12, dec=0, stack=True, min_interval="1m"))
 panels.append(ts(
     "WebWork calls per job execution",
     ['histogram_quantile(0.95, sum by (le, job_name) (rate(webwork_job_api_calls_bucket[$__range])))',
