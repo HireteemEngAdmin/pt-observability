@@ -312,7 +312,7 @@
         "regex": "^(server|cron)$",
         "multi": true,
         "includeAll": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "current": {
           "text": [
             "All"
@@ -350,7 +350,7 @@
         },
         "multi": true,
         "includeAll": true,
-        "allValue": ".*"
+        "allValue": ".+"
       },
       {
         "name": "level",
