@@ -1157,7 +1157,7 @@
       "type": "logs",
       "title": "Errors and warnings",
       "id": 21,
-      "description": "All of stderr, plus anything on stdout matching error/warn. Level filtering is heuristic while the backend still logs through console.* \u2014 see docs/superpowers/specs/2026-07-28-loki-logs-design.md. filename tells the two clustered API instances apart (server-out-8 vs server-out-9).",
+      "description": "Error and warning lines from the API, read from the level field. filename tells the two clustered instances apart (server-out-8 vs server-out-9). Lines that fail to parse are kept: those are the crashes that never reach the logger, and dropping them would hide exactly the worst failures.",
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -1174,17 +1174,8 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{stream=\"err\"}",
+          "expr": "{job=\"server\"} | json | level=~\"error|warn\" or __error__=\"JSONParserErr\"",
           "refId": "A",
-          "queryType": "range"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "{stream=\"out\"} |~ \"(?i)(error|warn)\"",
-          "refId": "B",
           "queryType": "range"
         }
       ],

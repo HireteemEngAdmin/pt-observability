@@ -195,24 +195,28 @@ panels.append(row("Logs", y))
 y += 1
 panels.append({
     "type": "logs", "title": "Errors and warnings", "id": nid(),
-    "description": "All of stderr, plus anything on stdout matching error/warn. Level filtering "
-                   "is heuristic while the backend still logs through console.* — see "
-                   "docs/superpowers/specs/2026-07-28-loki-logs-design.md. filename tells the two "
-                   "clustered API instances apart (server-out-8 vs server-out-9).",
+    "description": "Error and warning lines from the API, read from the level field. "
+                   "filename tells the two clustered instances apart (server-out-8 vs "
+                   "server-out-9). Lines that fail to parse are kept: those are the "
+                   "crashes that never reach the logger, and dropping them would hide "
+                   "exactly the worst failures.",
     "gridPos": {"h": 12, "w": 24, "x": 0, "y": y},
     "datasource": {"type": "loki", "uid": "loki"},
-    # Two queries, not one. LogQL cannot `or` stream selectors together:
-    # `{stream="err"} or {stream="out"} |~ ...` is a parse error. The logs panel
-    # accepts several targets and merges them for display.
-    #   A: all of stderr, whether or not the text says "error" — the real
-    #      failures observed look like `[user-access] ... cron failed:`
-    #   B: only the stdout lines matching error/warn, else the whole
-    #      informational stream would drown the panel
+    # One query now. This used to be two, because the backend logged plain text
+    # and the only way to find a failure was to read all of stderr and then
+    # grep stdout for the words error and warn. Both premises are gone: pino
+    # writes structured JSON, and it writes every level to stdout, so stderr
+    # carries no application errors at all. Reading the level field replaces
+    # both queries.
+    #
+    # The or-clause keeps lines that fail to parse. Those are Node's own
+    # crashes and PM2's notices, which never go through the logger, and they
+    # are the failures worth seeing most.
     "targets": [
         {"datasource": {"type": "loki", "uid": "loki"},
-         "expr": '{stream="err"}', "refId": "A", "queryType": "range"},
-        {"datasource": {"type": "loki", "uid": "loki"},
-         "expr": '{stream="out"} |~ "(?i)(error|warn)"', "refId": "B", "queryType": "range"},
+         "expr": '{job="server"} | json '
+                 '| level=~"error|warn" or __error__="JSONParserErr"',
+         "refId": "A", "queryType": "range"},
     ],
     "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending",
                 "enableLogDetails": True, "dedupStrategy": "none", "prettifyLogMessage": False},
