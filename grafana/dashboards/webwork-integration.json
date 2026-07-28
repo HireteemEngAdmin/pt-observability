@@ -2038,7 +2038,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\"} | json | module = `webwork` | rate_limited = `true`",
+          "expr": "{job=~\"server|cron\"} | json | module = `webwork` | rate_limited = `true`",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -2391,7 +2391,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\"} | json | module = `webwork` | outcome =~ `error|failure`",
+          "expr": "{job=~\"server|cron\"} | json | module = `webwork` | outcome =~ `error|failure`",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -2939,7 +2939,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\"} | json | module = `webwork` | job_execution_id != ``",
+          "expr": "{job=~\"server|cron\"} | json | module = `webwork` | job_execution_id != ``",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
