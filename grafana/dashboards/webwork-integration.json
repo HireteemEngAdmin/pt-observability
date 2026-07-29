@@ -1297,15 +1297,149 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Duplicate calls over time",
+      "description": "Calls identical to one made in the previous two seconds: same method, same full url. Nothing is deduplicated, this only counts. Near zero means an in-flight promise map would not be worth its complexity. A rise is the evidence that would justify building one. The method variable does not apply here: this counter carries no method label.",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (endpoint) (rate(webwork_duplicate_requests_total{job=~\"$job\", endpoint=~\"$endpoint\"}[$__rate_interval]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "interval": "1m"
+    },
+    {
+      "type": "timeseries",
+      "title": "Duplicate calls by origin",
+      "description": "What initiated the duplicated call. backend_request is an inbound HTTP request, cronjob is a scheduled run, unknown is neither, which would mean a caller outside any request.",
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (request_origin) (rate(webwork_duplicate_requests_total{job=~\"$job\", endpoint=~\"$endpoint\"}[$__rate_interval]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{request_origin}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "interval": "1m"
+    },
+    {
       "type": "row",
       "title": "Performance",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 42
       },
-      "id": 22,
+      "id": 24,
       "collapsed": false,
       "panels": []
     },
@@ -1313,12 +1447,12 @@
       "type": "timeseries",
       "title": "Latency percentiles",
       "description": "The mean is included because a percentile alone hides a bimodal distribution.",
-      "id": 23,
+      "id": 25,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "datasource": {
         "type": "prometheus",
@@ -1427,12 +1561,12 @@
       "type": "bargauge",
       "title": "Slowest endpoints (p95)",
       "description": "",
-      "id": 24,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 43
       },
       "datasource": {
         "type": "prometheus",
@@ -1510,12 +1644,12 @@
       "type": "timeseries",
       "title": "Requests in flight",
       "description": "Concurrency against WebWork. Sustained growth with no matching request rate means calls are hanging.",
-      "id": 25,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "datasource": {
         "type": "prometheus",
@@ -1576,12 +1710,12 @@
       "type": "timeseries",
       "title": "Time spent awaiting WebWork",
       "description": "Cumulative wait divided by wall clock. A value above 1 means calls overlap; it is effectively the average number of calls in flight.",
-      "id": 26,
+      "id": 28,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 43
+        "y": 51
       },
       "datasource": {
         "type": "prometheus",
@@ -1642,12 +1776,12 @@
       "type": "timeseries",
       "title": "Job duration",
       "description": "",
-      "id": 27,
+      "id": 29,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 43
+        "y": 51
       },
       "datasource": {
         "type": "prometheus",
@@ -1711,9 +1845,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 59
       },
-      "id": 28,
+      "id": 30,
       "collapsed": false,
       "panels": []
     },
@@ -1721,12 +1855,12 @@
       "type": "timeseries",
       "title": "HTTP 429 over time",
       "description": "When these appear tells you which job or rush hit the ceiling.",
-      "id": 29,
+      "id": 31,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 60
       },
       "datasource": {
         "type": "prometheus",
@@ -1788,12 +1922,12 @@
       "type": "bargauge",
       "title": "Endpoints hit hardest by rate limiting",
       "description": "",
-      "id": 30,
+      "id": 32,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 60
       },
       "datasource": {
         "type": "prometheus",
@@ -1871,12 +2005,12 @@
       "type": "timeseries",
       "title": "Retry-After advertised by WebWork",
       "description": "Only populated when WebWork sends the header. Nothing consumes it yet \u2014 the client has no backoff \u2014 so this is the budget a future retry would have to respect.",
-      "id": 31,
+      "id": 33,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 68
       },
       "datasource": {
         "type": "prometheus",
@@ -1949,12 +2083,12 @@
       "type": "timeseries",
       "title": "Attempts per operation",
       "description": "Attempts an operation actually made. Above 1 means pagination, not a retry loop: the client has no retry. A caller retrying shows up here too.",
-      "id": 32,
+      "id": 34,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 68
       },
       "datasource": {
         "type": "prometheus",
@@ -2015,12 +2149,12 @@
       "type": "timeseries",
       "title": "Operations settled, by outcome",
       "description": "",
-      "id": 33,
+      "id": 35,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 68
       },
       "datasource": {
         "type": "prometheus",
@@ -2081,12 +2215,12 @@
       "type": "logs",
       "title": "Rate limit events",
       "description": "pino lines where rate_limited is true, carrying the endpoint, the Retry-After value and the correlation id.",
-      "id": 34,
+      "id": 36,
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "datasource": {
         "type": "loki",
@@ -2119,9 +2253,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 86
       },
-      "id": 35,
+      "id": 37,
       "collapsed": false,
       "panels": []
     },
@@ -2129,12 +2263,12 @@
       "type": "timeseries",
       "title": "Errors over time",
       "description": "http_4xx / http_5xx / rate_limited / timeout / connection / unexpected.",
-      "id": 36,
+      "id": 38,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 79
+        "y": 87
       },
       "datasource": {
         "type": "prometheus",
@@ -2195,12 +2329,12 @@
       "type": "bargauge",
       "title": "Errors by endpoint",
       "description": "",
-      "id": 37,
+      "id": 39,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 79
+        "y": 87
       },
       "datasource": {
         "type": "prometheus",
@@ -2278,12 +2412,12 @@
       "type": "timeseries",
       "title": "Transport failures",
       "description": "Failures with no HTTP response. The client sets no timeout, so a \"timeout\" here is undici's own default rather than a deadline we chose.",
-      "id": 38,
+      "id": 40,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 95
       },
       "datasource": {
         "type": "prometheus",
@@ -2369,12 +2503,12 @@
       "type": "timeseries",
       "title": "Errors by status code",
       "description": "",
-      "id": 39,
+      "id": 41,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 95
       },
       "datasource": {
         "type": "prometheus",
@@ -2435,12 +2569,12 @@
       "type": "logs",
       "title": "WebWork logs",
       "description": "module is a field inside the pino JSON, not a Loki stream label \u2014 the labels are job, stream, host and filename \u2014 so it has to be matched after | json, never as {module=\"webwork\"}, which silently returns nothing. Drop the outcome filter to see successes too.",
-      "id": 40,
+      "id": 42,
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 95
+        "y": 103
       },
       "datasource": {
         "type": "loki",
@@ -2473,9 +2607,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 107
+        "y": 115
       },
-      "id": 41,
+      "id": 43,
       "collapsed": false,
       "panels": []
     },
@@ -2483,12 +2617,12 @@
       "type": "stat",
       "title": "Runs in range",
       "description": "",
-      "id": 42,
+      "id": 44,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2541,12 +2675,12 @@
       "type": "stat",
       "title": "Currently running",
       "description": "The cron is overlap-guarded, so anything above 1 means two processes are running it at once \u2014 expected with multiple instances, worth checking otherwise.",
-      "id": 43,
+      "id": 45,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2603,12 +2737,12 @@
       "type": "stat",
       "title": "Last run",
       "description": "",
-      "id": 44,
+      "id": 46,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2661,12 +2795,12 @@
       "type": "stat",
       "title": "Records processed",
       "description": "",
-      "id": 45,
+      "id": 47,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2719,12 +2853,12 @@
       "type": "stat",
       "title": "Succeeded",
       "description": "",
-      "id": 46,
+      "id": 48,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2777,12 +2911,12 @@
       "type": "stat",
       "title": "Failed",
       "description": "",
-      "id": 47,
+      "id": 49,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 108
+        "y": 116
       },
       "datasource": {
         "type": "prometheus",
@@ -2839,12 +2973,12 @@
       "type": "timeseries",
       "title": "Records handled per run",
       "description": "",
-      "id": 48,
+      "id": 50,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 112
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2906,12 +3040,12 @@
       "type": "timeseries",
       "title": "WebWork calls per job execution",
       "description": "How much WebWork traffic one reconcile run generates \u2014 the number to watch against the 60/min ceiling.",
-      "id": 49,
+      "id": 51,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 112
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2984,12 +3118,12 @@
       "type": "logs",
       "title": "Job logs",
       "description": "Start, completion and failure lines for the reconcile job, with duration, record counts and the JobExecution id.",
-      "id": 50,
+      "id": 52,
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 120
+        "y": 128
       },
       "datasource": {
         "type": "loki",

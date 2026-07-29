@@ -282,6 +282,23 @@ panels.append({
                     "overrides": []},
 })
 
+y += 8
+panels.append(ts(
+    "Duplicate calls over time",
+    [f'sum by (endpoint) (rate(webwork_duplicate_requests_total{{job=~"$job", endpoint=~"$endpoint"}}[$__rate_interval]))'],
+    "{{endpoint}}", 0, y, w=12, unit="reqps", min_interval="1m",
+    desc="Calls identical to one made in the previous two seconds: same method, same full url. "
+         "Nothing is deduplicated, this only counts. Near zero means an in-flight promise map "
+         "would not be worth its complexity. A rise is the evidence that would justify building one. "
+         "The method variable does not apply here: this counter carries no method label."))
+panels.append(ts(
+    "Duplicate calls by origin",
+    [f'sum by (request_origin) (rate(webwork_duplicate_requests_total{{job=~"$job", endpoint=~"$endpoint"}}[$__rate_interval]))'],
+    "{{request_origin}}", 12, y, w=12, unit="reqps", stack=True, min_interval="1m",
+    desc="What initiated the duplicated call. backend_request is an inbound HTTP request, "
+         "cronjob is a scheduled run, unknown is neither, which would mean a caller outside "
+         "any request."))
+
 # ── Performance ──────────────────────────────────────────────────
 y += 8
 panels.append(row("Performance", y))
