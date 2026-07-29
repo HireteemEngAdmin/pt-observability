@@ -283,21 +283,44 @@ panels.append({
 })
 
 y += 8
+# prom-client creates no child series for a labelled counter until the first
+# .inc(). Until the first duplicate ever happens, webwork_duplicate_requests_total
+# is absent from /metrics entirely, and the two timeseries below render "No
+# data" - indistinguishable from the backend change not having deployed at all.
+# This stat renders a real 0 instead, via `or vector(0)`, so an empty dashboard
+# and a genuinely clean one no longer look the same.
+panels.append(stat(
+    "Duplicate calls (range)",
+    'sum(increase(webwork_duplicate_requests_total{job=~"$job"}[$__range])) or vector(0)',
+    0, y, w=24, h=4, dec=0,
+    desc="Total duplicate calls detected over the selected range. or vector(0) so it reads 0 "
+         "rather than \"No data\": before the first duplicate ever recorded, this metric does "
+         "not exist in /metrics at all, so an absent series here is not evidence of anything. "
+         "A 0 alongside a non-zero Requests (range) above IS the answer this counter exists to "
+         "give: near-zero duplication, not a gap in the data.",
+    steps=[{"color": "green", "value": None}, {"color": "orange", "value": 1}]))
+y += 4
 panels.append(ts(
     "Duplicate calls over time",
     [f'sum by (endpoint) (rate(webwork_duplicate_requests_total{{job=~"$job", endpoint=~"$endpoint"}}[$__rate_interval]))'],
     "{{endpoint}}", 0, y, w=12, unit="reqps", min_interval="1m",
-    desc="Calls identical to one made in the previous two seconds: same method, same full url. "
-         "Nothing is deduplicated, this only counts. Near zero means an in-flight promise map "
-         "would not be worth its complexity. A rise is the evidence that would justify building one. "
-         "The method variable does not apply here: this counter carries no method label."))
+    desc="Calls identical to one made in the previous two seconds: same GET request, same full "
+         "url. Writes are excluded, since a write's distinguishing parameters travel in its body "
+         "rather than the url. Nothing is deduplicated, this only counts. Near zero means an "
+         "in-flight promise map would not be worth its complexity. A rise is the evidence that "
+         "would justify building one. The method variable does not apply here: this counter "
+         "carries no method label. An empty panel means either zero duplicates or that this "
+         "backend change has not deployed yet; check the Duplicate calls (range) stat above "
+         "against Requests (range) to tell the two apart."))
 panels.append(ts(
     "Duplicate calls by origin",
     [f'sum by (request_origin) (rate(webwork_duplicate_requests_total{{job=~"$job", endpoint=~"$endpoint"}}[$__rate_interval]))'],
     "{{request_origin}}", 12, y, w=12, unit="reqps", stack=True, min_interval="1m",
     desc="What initiated the duplicated call. backend_request is an inbound HTTP request, "
          "cronjob is a scheduled run, unknown is neither, which would mean a caller outside "
-         "any request."))
+         "any request. An empty panel means either zero duplicates or that this backend change "
+         "has not deployed yet; check the Duplicate calls (range) stat above against Requests "
+         "(range) to tell the two apart."))
 
 # ── Performance ──────────────────────────────────────────────────
 y += 8

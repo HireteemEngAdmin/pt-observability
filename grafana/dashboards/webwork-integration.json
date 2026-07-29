@@ -1297,15 +1297,77 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Duplicate calls (range)",
+      "description": "Total duplicate calls detected over the selected range. or vector(0) so it reads 0 rather than \"No data\": before the first duplicate ever recorded, this metric does not exist in /metrics at all, so an absent series here is not evidence of anything. A 0 alongside a non-zero Requests (range) above IS the answer this counter exists to give: near-zero duplication, not a gap in the data.",
+      "id": 22,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(webwork_duplicate_requests_total{job=~\"$job\"}[$__range])) or vector(0)",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
       "type": "timeseries",
       "title": "Duplicate calls over time",
-      "description": "Calls identical to one made in the previous two seconds: same method, same full url. Nothing is deduplicated, this only counts. Near zero means an in-flight promise map would not be worth its complexity. A rise is the evidence that would justify building one. The method variable does not apply here: this counter carries no method label.",
-      "id": 22,
+      "description": "Calls identical to one made in the previous two seconds: same GET request, same full url. Writes are excluded, since a write's distinguishing parameters travel in its body rather than the url. Nothing is deduplicated, this only counts. Near zero means an in-flight promise map would not be worth its complexity. A rise is the evidence that would justify building one. The method variable does not apply here: this counter carries no method label. An empty panel means either zero duplicates or that this backend change has not deployed yet; check the Duplicate calls (range) stat above against Requests (range) to tell the two apart.",
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 38
       },
       "datasource": {
         "type": "prometheus",
@@ -1366,13 +1428,13 @@
     {
       "type": "timeseries",
       "title": "Duplicate calls by origin",
-      "description": "What initiated the duplicated call. backend_request is an inbound HTTP request, cronjob is a scheduled run, unknown is neither, which would mean a caller outside any request.",
-      "id": 23,
+      "description": "What initiated the duplicated call. backend_request is an inbound HTTP request, cronjob is a scheduled run, unknown is neither, which would mean a caller outside any request. An empty panel means either zero duplicates or that this backend change has not deployed yet; check the Duplicate calls (range) stat above against Requests (range) to tell the two apart.",
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 38
       },
       "datasource": {
         "type": "prometheus",
@@ -1437,9 +1499,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 46
       },
-      "id": 24,
+      "id": 25,
       "collapsed": false,
       "panels": []
     },
@@ -1447,12 +1509,12 @@
       "type": "timeseries",
       "title": "Latency percentiles",
       "description": "The mean is included because a percentile alone hides a bimodal distribution.",
-      "id": 25,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1561,12 +1623,12 @@
       "type": "bargauge",
       "title": "Slowest endpoints (p95)",
       "description": "",
-      "id": 26,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1644,12 +1706,12 @@
       "type": "timeseries",
       "title": "Requests in flight",
       "description": "Concurrency against WebWork. Sustained growth with no matching request rate means calls are hanging.",
-      "id": 27,
+      "id": 28,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 55
       },
       "datasource": {
         "type": "prometheus",
@@ -1710,12 +1772,12 @@
       "type": "timeseries",
       "title": "Time spent awaiting WebWork",
       "description": "Cumulative wait divided by wall clock. A value above 1 means calls overlap; it is effectively the average number of calls in flight.",
-      "id": 28,
+      "id": 29,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 51
+        "y": 55
       },
       "datasource": {
         "type": "prometheus",
@@ -1776,12 +1838,12 @@
       "type": "timeseries",
       "title": "Job duration",
       "description": "",
-      "id": 29,
+      "id": 30,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 51
+        "y": 55
       },
       "datasource": {
         "type": "prometheus",
@@ -1845,9 +1907,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 63
       },
-      "id": 30,
+      "id": 31,
       "collapsed": false,
       "panels": []
     },
@@ -1855,12 +1917,12 @@
       "type": "timeseries",
       "title": "HTTP 429 over time",
       "description": "When these appear tells you which job or rush hit the ceiling.",
-      "id": 31,
+      "id": 32,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1922,12 +1984,12 @@
       "type": "bargauge",
       "title": "Endpoints hit hardest by rate limiting",
       "description": "",
-      "id": 32,
+      "id": 33,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 60
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -2005,12 +2067,12 @@
       "type": "timeseries",
       "title": "Retry-After advertised by WebWork",
       "description": "Only populated when WebWork sends the header. Nothing consumes it yet \u2014 the client has no backoff \u2014 so this is the budget a future retry would have to respect.",
-      "id": 33,
+      "id": 34,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 68
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -2083,12 +2145,12 @@
       "type": "timeseries",
       "title": "Attempts per operation",
       "description": "Attempts an operation actually made. Above 1 means pagination, not a retry loop: the client has no retry. A caller retrying shows up here too.",
-      "id": 34,
+      "id": 35,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 68
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -2149,12 +2211,12 @@
       "type": "timeseries",
       "title": "Operations settled, by outcome",
       "description": "",
-      "id": 35,
+      "id": 36,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 68
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -2215,12 +2277,12 @@
       "type": "logs",
       "title": "Rate limit events",
       "description": "pino lines where rate_limited is true, carrying the endpoint, the Retry-After value and the correlation id.",
-      "id": 36,
+      "id": 37,
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 80
       },
       "datasource": {
         "type": "loki",
@@ -2253,9 +2315,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 90
       },
-      "id": 37,
+      "id": 38,
       "collapsed": false,
       "panels": []
     },
@@ -2263,12 +2325,12 @@
       "type": "timeseries",
       "title": "Errors over time",
       "description": "http_4xx / http_5xx / rate_limited / timeout / connection / unexpected.",
-      "id": 38,
+      "id": 39,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 91
       },
       "datasource": {
         "type": "prometheus",
@@ -2329,12 +2391,12 @@
       "type": "bargauge",
       "title": "Errors by endpoint",
       "description": "",
-      "id": 39,
+      "id": 40,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 87
+        "y": 91
       },
       "datasource": {
         "type": "prometheus",
@@ -2412,12 +2474,12 @@
       "type": "timeseries",
       "title": "Transport failures",
       "description": "Failures with no HTTP response. The client sets no timeout, so a \"timeout\" here is undici's own default rather than a deadline we chose.",
-      "id": 40,
+      "id": 41,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 95
+        "y": 99
       },
       "datasource": {
         "type": "prometheus",
@@ -2503,12 +2565,12 @@
       "type": "timeseries",
       "title": "Errors by status code",
       "description": "",
-      "id": 41,
+      "id": 42,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 95
+        "y": 99
       },
       "datasource": {
         "type": "prometheus",
@@ -2569,12 +2631,12 @@
       "type": "logs",
       "title": "WebWork logs",
       "description": "module is a field inside the pino JSON, not a Loki stream label \u2014 the labels are job, stream, host and filename \u2014 so it has to be matched after | json, never as {module=\"webwork\"}, which silently returns nothing. Drop the outcome filter to see successes too.",
-      "id": 42,
+      "id": 43,
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 103
+        "y": 107
       },
       "datasource": {
         "type": "loki",
@@ -2607,9 +2669,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 119
       },
-      "id": 43,
+      "id": 44,
       "collapsed": false,
       "panels": []
     },
@@ -2617,12 +2679,12 @@
       "type": "stat",
       "title": "Runs in range",
       "description": "",
-      "id": 44,
+      "id": 45,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2675,12 +2737,12 @@
       "type": "stat",
       "title": "Currently running",
       "description": "The cron is overlap-guarded, so anything above 1 means two processes are running it at once \u2014 expected with multiple instances, worth checking otherwise.",
-      "id": 45,
+      "id": 46,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2737,12 +2799,12 @@
       "type": "stat",
       "title": "Last run",
       "description": "",
-      "id": 46,
+      "id": 47,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2795,12 +2857,12 @@
       "type": "stat",
       "title": "Records processed",
       "description": "",
-      "id": 47,
+      "id": 48,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2853,12 +2915,12 @@
       "type": "stat",
       "title": "Succeeded",
       "description": "",
-      "id": 48,
+      "id": 49,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2911,12 +2973,12 @@
       "type": "stat",
       "title": "Failed",
       "description": "",
-      "id": 49,
+      "id": 50,
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 116
+        "y": 120
       },
       "datasource": {
         "type": "prometheus",
@@ -2973,12 +3035,12 @@
       "type": "timeseries",
       "title": "Records handled per run",
       "description": "",
-      "id": 50,
+      "id": 51,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 120
+        "y": 124
       },
       "datasource": {
         "type": "prometheus",
@@ -3040,12 +3102,12 @@
       "type": "timeseries",
       "title": "WebWork calls per job execution",
       "description": "How much WebWork traffic one reconcile run generates \u2014 the number to watch against the 60/min ceiling.",
-      "id": 51,
+      "id": 52,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 120
+        "y": 124
       },
       "datasource": {
         "type": "prometheus",
@@ -3118,12 +3180,12 @@
       "type": "logs",
       "title": "Job logs",
       "description": "Start, completion and failure lines for the reconcile job, with duration, record counts and the JobExecution id.",
-      "id": 52,
+      "id": 53,
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 128
+        "y": 132
       },
       "datasource": {
         "type": "loki",
