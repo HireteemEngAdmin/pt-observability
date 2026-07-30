@@ -158,6 +158,35 @@ panels.append(ts(
          "too (pm2 reload). Phase 6 alert fires above 3/h.",
     minv=0, fill=0))
 
+# ── Database pool ─────────────────────────────
+# Not deduplicated, unlike the gauges DEDUP describes: every process keeps its own
+# pool, so the api workers and the cron are separate readings and collapsing them
+# would hide the one that is saturated.
+y += 8
+panels.append(row("Database pool (per process)", y))
+y += 1
+panels.append(ts(
+    "Waiting for a connection",
+    [("db_pool_waiting", "{{job}} {{instance_id}}")],
+    0, y, w=8, unit="short", minv=0,
+    desc="Queries queued because every connection is checked out. Anything sustained above "
+         "zero means the pool is the bottleneck, not the database and not CPU. On 2026-07-30 "
+         "this shape produced 503s from the API Gateway while the app itself never returned "
+         "a 5xx."))
+panels.append(ts(
+    "In use and available",
+    [("db_pool_in_use", "in use {{job}} {{instance_id}}"),
+     ("db_pool_available", "available {{job}} {{instance_id}}")],
+    8, y, w=8, unit="short", minv=0,
+    desc="Checked out against idle. Available at zero with in use at the ceiling is the "
+         "saturated state; read it together with the waiting panel."))
+panels.append(ts(
+    "Saturation against the configured ceiling",
+    [("100 * db_pool_in_use / db_pool_max", "{{job}} {{instance_id}}")],
+    16, y, w=8, unit="percent", minv=0,
+    desc="in use over db_pool_max, so the limit is not hardcoded here. The ceiling is per "
+         "process, so two api workers at 100% is twice the connections of one."))
+
 # ── LearnUpon ────────────────────────────────────────────────────
 y += 8
 panels.append(row("LearnUpon", y))
