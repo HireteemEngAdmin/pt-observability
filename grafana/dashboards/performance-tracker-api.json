@@ -824,7 +824,7 @@
     },
     {
       "type": "row",
-      "title": "LearnUpon",
+      "title": "Database pool (per process)",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -837,14 +837,248 @@
     },
     {
       "type": "timeseries",
+      "title": "Waiting for a connection",
+      "description": "Queries queued because every connection is checked out. Anything sustained above zero means the pool is the bottleneck, not the database and not CPU. On 2026-07-30 this shape produced 503s from the API Gateway while the app itself never returned a 5xx.",
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_pool_waiting",
+          "legendFormat": "{{job}} {{instance_id}}",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "In use and available",
+      "description": "Checked out against idle. Available at zero with in use at the ceiling is the saturated state; read it together with the waiting panel.",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_pool_in_use",
+          "legendFormat": "in use {{job}} {{instance_id}}",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_pool_available",
+          "legendFormat": "available {{job}} {{instance_id}}",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Saturation against the configured ceiling",
+      "description": "in use over db_pool_max, so the limit is not hardcoded here. The ceiling is per process, so two api workers at 100% is twice the connections of one.",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * db_pool_in_use / db_pool_max",
+          "legendFormat": "{{job}} {{instance_id}}",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "LearnUpon",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 19,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
       "title": "Queues over time",
       "description": "max() deduplicates: the gauges arrive from both the api and cron jobs with the same value.",
-      "id": 16,
+      "id": 20,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 39
       },
       "datasource": {
         "type": "prometheus",
@@ -934,12 +1168,12 @@
       "type": "timeseries",
       "title": "Webhook processing p95",
       "description": "Time spent dispatching an event to its handler, by type.",
-      "id": 17,
+      "id": 21,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 39
       },
       "datasource": {
         "type": "prometheus",
@@ -1004,12 +1238,12 @@
       "type": "timeseries",
       "title": "Webhooks received/s by type",
       "description": "Emitted by the api job \u2014 webhooks come in through the API.",
-      "id": 18,
+      "id": 22,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1074,12 +1308,12 @@
       "type": "timeseries",
       "title": "Events processed/s by status",
       "description": "Emitted by the cron job. status=failed climbing precedes dead letter growth.",
-      "id": 19,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 47
       },
       "datasource": {
         "type": "prometheus",
@@ -1147,22 +1381,22 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 55
       },
-      "id": 20,
+      "id": 24,
       "collapsed": false,
       "panels": []
     },
     {
       "type": "logs",
       "title": "Errors and warnings",
-      "id": 21,
+      "id": 25,
       "description": "Error and warning lines from the API, read from the level field. filename tells the two clustered instances apart (server-out-8 vs server-out-9). Lines that fail to parse are kept: those are the crashes that never reach the logger, and dropping them would hide exactly the worst failures.",
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 56
       },
       "datasource": {
         "type": "loki",
