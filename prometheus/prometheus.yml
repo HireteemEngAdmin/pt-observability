@@ -20,9 +20,15 @@ scrape_configs:
     static_configs:
       - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:3000']
 
+  # The cron runs on its own EC2, separate from the API. Only this job moved:
+  # `api` and `node` still point at the application host.
+  #
+  # The job name is load bearing. Every cron panel selects on job="cron", in
+  # Prometheus and in Loki alike, and nothing filters on host or instance, so
+  # the dashboards follow the target without being touched.
   - job_name: cron
     static_configs:
-      - targets: ['ec2-44-220-173-115.compute-1.amazonaws.com:9464']
+      - targets: ['ec2-100-52-217-13.compute-1.amazonaws.com:9464']
 
   - job_name: node
     scheme: https
