@@ -120,6 +120,31 @@ panels.append(ts(
          "8ms, which reads as an API far faster than it is."))
 y += 8
 panels.append(ts(
+    "Latency p99 by route (top 5)",
+    [("topk(5, histogram_quantile(0.99, sum by (le, route) (rate("
+      "http_request_duration_seconds_bucket{route!=\"cors-preflight\"}[5m]))))", "{{route}}")],
+    0, y, w=12, unit="s", minv=0,
+    desc="The panel above says something is slow; this one says what. Read it with the "
+         "one beside it, never alone: a route with a handful of requests can post a "
+         "dramatic p99 off a single slow call and outrank a route that is actually "
+         "shaping the aggregate. Latency here, weight there."))
+panels.append(ts(
+    "Requests slower than 0.5s, by route (top 5)",
+    [("topk(5, sum by (route) (rate(http_request_duration_seconds_count"
+      "{route!=\"cors-preflight\"}[5m])) - sum by (route) (rate("
+      "http_request_duration_seconds_bucket{route!=\"cors-preflight\",le=\"0.5\"}[5m])))", "{{route}}")],
+    12, y, w=12, unit="reqps", minv=0,
+    desc="Who actually draws the aggregate p99. The p99 line is the slowest 1% of "
+         "requests, so the route supplying most of them sets it, however healthy "
+         "everything else is. Measured over one 6h window: 98.6% of requests finished "
+         "under 0.5s, and of the 1,588 that did not, /api/time-tracker/init supplied "
+         "68.5%, which was the whole of the p99 people were asking about. "
+         "Its median equals the mean WebWork call it waits on, 0.54s against 0.539s, so "
+         "the number was never about the database or the pool. "
+         "Note the bucket label is le=\"0.5\": these carry a decimal, and le=\"0.50\" "
+         "matches nothing and paints an empty panel that reads as good news."))
+y += 8
+panels.append(ts(
     "5xx error rate",
     # `or vector(0)`: with no 5xx the numerator matches no series and the division
     # returns empty, painting "No data" — indistinguishable from a broken scrape,
