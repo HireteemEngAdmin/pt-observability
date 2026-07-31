@@ -8,11 +8,21 @@ services:
       - --storage.tsdb.retention.time=180d
       - --web.enable-lifecycle
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # node_exporter's self-signed cert, pinned as the CA for the node job.
-      - ./prometheus/node_exporter-ca.crt:/etc/prometheus/node_exporter-ca.crt:ro
+      # The directory, not the files inside it. git pull replaces a file rather
+      # than editing it, and a single-file bind mount keeps resolving the old
+      # inode: the container goes on serving the previous config while the host
+      # shows the new one, and /-/reload faithfully re-reads the stale copy and
+      # reports success. Mounting the directory keeps the inode stable, so a
+      # reload picks up prometheus.yml and node_exporter-ca.crt without
+      # recreating the container.
+      - ./prometheus:/etc/prometheus:ro
       # node_exporter basic auth password (./secrets never reaches git).
-      - ./secrets:/etc/prometheus/secrets:ro
+      #
+      # Deliberately not nested under /etc/prometheus: mounting into a read-only
+      # parent mount requires the mountpoint to already exist there, and ./secrets
+      # lives outside ./prometheus. A sibling path avoids depending on how the
+      # runtime orders and creates nested mounts.
+      - ./secrets:/etc/prometheus-secrets:ro
       - prom-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
@@ -24,7 +34,8 @@ services:
     command:
       - -config.file=/etc/loki/loki-config.yml
     volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      # Directory, not the file: see the note on the prometheus mount.
+      - ./loki:/etc/loki:ro
       - loki-data:/loki
     # No ports: only Caddy (push) and Grafana (query) talk to it.
 
@@ -68,7 +79,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Directory, not the file: see the note on the prometheus mount.
+      - ./caddy:/etc/caddy:ro
       - caddy-data:/data
 
 # Fixed names, without the project prefix, so the backup/restore scripts behave

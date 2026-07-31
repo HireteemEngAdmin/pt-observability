@@ -52,6 +52,28 @@ anything under `grafana/provisioning/`, use
 `docker compose up -d --force-recreate grafana` or the change is silently
 ignored.
 
+### Deploying a config change
+
+```bash
+git pull && curl -sS -X POST http://127.0.0.1:9090/-/reload
+```
+
+That is enough for `prometheus/prometheus.yml` because the compose file mounts
+the config **directories**, not the individual files inside them.
+
+The distinction is not cosmetic and it has already cost one deploy. `git pull`
+replaces a file rather than editing it, so a single-file bind mount goes on
+resolving the old inode: the host shows the new config, the container keeps
+serving the previous one, and `/-/reload` re-reads the stale copy and answers
+success. Nothing looks wrong. `docker compose restart` does not help either,
+since it reuses the same container and the same mount. Only recreating did.
+
+If a future change reintroduces a single-file mount, this trap comes back with
+it. Loki and Caddy mount their directories for the same reason.
+
+Grafana is the exception above: its provisioning is a directory mount already,
+but Grafana reads it at boot, so it needs the recreate for a different reason.
+
 ## Golden rule: nothing exists only in the UI
 
 Anything created or edited in the Grafana UI has to come back to the repo, or

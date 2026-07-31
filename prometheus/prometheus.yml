@@ -34,8 +34,10 @@ scrape_configs:
     scheme: https
     basic_auth:
       username: prometheus
-      # Mounted by compose from ./secrets, which is outside git.
-      password_file: /etc/prometheus/secrets/node_exporter_password
+      # Mounted by compose from ./secrets, which is outside git. Kept beside
+      # /etc/prometheus rather than inside it, because that directory is now a
+      # read-only bind mount and nesting into one is runtime dependent.
+      password_file: /etc/prometheus-secrets/node_exporter_password
     tls_config:
       # The EC2's self-signed cert is pinned as the CA rather than using
       # insecure_skip_verify, so the scrape fails if the certificate is swapped
