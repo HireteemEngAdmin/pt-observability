@@ -74,6 +74,18 @@ it. Loki and Caddy mount their directories for the same reason.
 Grafana is the exception above: its provisioning is a directory mount already,
 but Grafana reads it at boot, so it needs the recreate for a different reason.
 
+## Frontend observability
+
+Web Vitals, errors and API timings from the Vercel-hosted SPA arrive through the
+API rather than directly: the browser posts to `POST /api/telemetry`, which
+aggregates into the metrics Prometheus already scrapes and the logs Alloy
+already ships. No collector, no Faro receiver and no new public endpoint, and no
+credential ever reaches the browser.
+
+Dashboard: `grafana/dashboards/frontend-observability.json`.
+Full architecture, sampling, sanitisation, alerts and rollback:
+[FRONTEND_OBSERVABILITY.md](FRONTEND_OBSERVABILITY.md).
+
 ## Golden rule: nothing exists only in the UI
 
 Anything created or edited in the Grafana UI has to come back to the repo, or
