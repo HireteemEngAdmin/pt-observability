@@ -109,8 +109,19 @@ a browser:
 - stacks are stripped of origins and clamped to 2000 chars
 - unknown event kinds, vitals and enum values are dropped, not coerced
 
-Covered by `backend/__tests__/telemetryIngest.test.js` (32 tests), which asserts
-on the redactions and on the label domains rather than on implementation.
+Covered by `backend/__tests__/telemetryIngest.test.js`, which asserts on the
+redactions and on the label domains rather than on implementation.
+
+### A note on log field names
+
+Frontend events are logged with `component="frontend"` and
+`client_environment`, **not** `service` or `environment`. The base pino logger
+already sets those two, and a duplicate key in a JSON log line makes Loki's
+`| json` parser keep the *first* occurrence - so a filter on the second one
+matches nothing at all. This was found by querying Loki after the first
+production smoke test: `| json | service="frontend"` returned 0 lines while the
+raw text search returned 2. Anything added to these log lines in future must not
+shadow a field the base logger already emits.
 
 ## Environment variables
 
@@ -132,11 +143,23 @@ Backend: none. It reuses the existing logger and metrics registry.
 
 ## Vercel setup
 
-1. Project → Settings → Environment Variables → enable the system variables so
-   `VITE_VERCEL_ENV` and `VITE_VERCEL_GIT_COMMIT_SHA` are exposed to the build.
-2. Set `VITE_APP_VERSION` if you want something friendlier than the SHA.
-3. Preview deployments report `environment="preview"` automatically and are
-   filtered out of the production dashboard by the `environment` variable.
+**Nothing to configure.** `VITE_API_URL` is already set (the existing axios
+clients depend on it), and the environment and commit are bridged in
+`ui/vite.config.ts`.
+
+That bridge is not optional and is easy to get wrong. Vercel's variables are
+called `VERCEL_ENV` and `VERCEL_GIT_COMMIT_SHA`; Vite only inlines names
+prefixed `VITE_`. Reading `import.meta.env.VITE_VERCEL_ENV` in application code
+therefore yields `undefined` no matter what is toggled in the Vercel dashboard,
+and the first version of this integration shipped exactly that bug: every
+preview deployment reported itself as `production` and every build reported its
+commit as `unknown`, with nothing failing anywhere.
+
+`vite.config.ts` maps them at build time with `define`, which is versioned and
+needs no per-environment step. `src/observability/__tests__/context.test.ts`
+covers it; removing the bridge fails two of those tests.
+
+Optional: set `VITE_APP_VERSION` for something friendlier than a short SHA.
 
 ## Dashboard
 
