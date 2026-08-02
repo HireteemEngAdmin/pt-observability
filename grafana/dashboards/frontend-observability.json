@@ -2259,7 +2259,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "topk(10, sum by (error_name, fingerprint) (count_over_time({job=\"server\"} | json | service=\"frontend\" | error_name != \"\" [$__interval])))",
+          "expr": "topk(10, sum by (error_name, fingerprint) (count_over_time({job=\"server\"} | json | component=\"frontend\" | error_name != \"\" [$__interval])))",
           "legendFormat": "{{error_name}} · {{fingerprint}}"
         }
       ],
@@ -2336,7 +2336,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"server\"} | json | service=\"frontend\" | environment =~ \"$environment\"",
+          "expr": "{job=\"server\"} | json | component=\"frontend\" | client_environment =~ \"$environment\"",
           "datasource": {
             "type": "loki",
             "uid": "loki"
