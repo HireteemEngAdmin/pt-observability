@@ -135,8 +135,8 @@
     },
     {
       "type": "stat",
-      "title": "Page views / min",
-      "description": "Route activations. PostHog owns product analytics; this is here so the other panels can be read as rates.",
+      "title": "Page views",
+      "description": "Route activations in the selected period. A total rather than a rate: at this volume a per-second rate over a short window is empty, and an empty panel reads as broken when the answer is a number. PostHog owns product analytics; this is here so the other panels can be read against traffic.",
       "id": 2,
       "gridPos": {
         "h": 4,
@@ -151,7 +151,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(frontend_page_views_total{environment=~\"$environment\", route=~\"$route\"}[$__rate_interval])) * 60",
+          "expr": "sum(increase(frontend_page_views_total{environment=~\"$environment\", route=~\"$route\"}[$__range])) or vector(0)",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -194,8 +194,8 @@
     },
     {
       "type": "stat",
-      "title": "Errors / min",
-      "description": "Every kind of frontend error, including ones the user never saw.",
+      "title": "Errors",
+      "description": "Every kind of frontend error in the period, including ones no user noticed.",
       "id": 3,
       "gridPos": {
         "h": 4,
@@ -210,7 +210,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(frontend_errors_total{environment=~\"$environment\", route=~\"$route\", browser=~\"$browser\"}[$__rate_interval])) * 60",
+          "expr": "sum(increase(frontend_errors_total{environment=~\"$environment\", route=~\"$route\", browser=~\"$browser\"}[$__range])) or vector(0)",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -276,7 +276,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(frontend_api_request_duration_seconds_count{environment=~\"$environment\", status_class=~\"4xx|5xx|unknown\"}[$__rate_interval])) / clamp_min(sum(rate(frontend_api_request_duration_seconds_count{environment=~\"$environment\"}[$__rate_interval])), 0.0001)",
+          "expr": "(sum(increase(frontend_api_request_duration_seconds_count{environment=~\"$environment\", status_class=~\"4xx|5xx|unknown\"}[$__range])) or vector(0)) / clamp_min(sum(increase(frontend_api_request_duration_seconds_count{environment=~\"$environment\"}[$__range])), 1)",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -342,7 +342,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"LCP\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"LCP\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__range])))",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -408,7 +408,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"INP\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"INP\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__range])))",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -474,7 +474,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_cls_bucket{environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.75, sum by (le) (rate(frontend_cls_bucket{environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__range])))",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -540,7 +540,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"TTFB\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(frontend_web_vitals_seconds_bucket{metric=\"TTFB\", environment=~\"$environment\", route=~\"$route\", device=~\"$device\"}[$__range])))",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -606,7 +606,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(frontend_api_request_duration_seconds_bucket{environment=~\"$environment\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(frontend_api_request_duration_seconds_bucket{environment=~\"$environment\"}[$__range])))",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -715,7 +715,7 @@
     },
     {
       "type": "stat",
-      "title": "Events dropped / min",
+      "title": "Events dropped",
       "description": "Rejected by the ingest endpoint. A steady non-zero rate means a client is sending something the schema does not accept.",
       "id": 11,
       "gridPos": {
@@ -731,7 +731,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(frontend_telemetry_events_dropped_total[$__rate_interval])) * 60",
+          "expr": "sum(increase(frontend_telemetry_events_dropped_total[$__range])) or vector(0)",
           "editorMode": "code",
           "instant": true,
           "datasource": {
@@ -778,7 +778,7 @@
     {
       "type": "stat",
       "title": "Deployed build",
-      "description": "The build the browser last reported.",
+      "description": "The build browsers are currently reporting. Shows the label, not the gauge value - the value is always 1 by construction, which is what this panel displayed before.",
       "id": 12,
       "gridPos": {
         "h": 4,
@@ -796,6 +796,7 @@
           "expr": "frontend_build_info{environment=~\"$environment\"}",
           "editorMode": "code",
           "instant": true,
+          "legendFormat": "{{version}}",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -810,9 +811,9 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area"
+        "textMode": "name",
+        "colorMode": "none",
+        "graphMode": "none"
       },
       "fieldConfig": {
         "defaults": {
@@ -820,15 +821,6 @@
           "color": {
             "mode": "fixed",
             "fixedColor": "text"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
           }
         },
         "overrides": []
@@ -2259,7 +2251,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "topk(10, sum by (error_name, fingerprint) (count_over_time({job=\"server\"} | json | component=\"frontend\" | error_name != \"\" [$__interval])))",
+          "expr": "topk(10, sum by (error_name, fingerprint) (count_over_time({job=\"server\"} | json | service=\"frontend\" | error_name != \"\" [$__interval])))",
           "legendFormat": "{{error_name}} · {{fingerprint}}"
         }
       ],
@@ -2336,7 +2328,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"server\"} | json | component=\"frontend\" | client_environment =~ \"$environment\"",
+          "expr": "{job=\"server\"} | json | service=\"frontend\" | environment =~ \"$environment\"",
           "datasource": {
             "type": "loki",
             "uid": "loki"
