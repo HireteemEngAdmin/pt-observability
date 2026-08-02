@@ -109,8 +109,19 @@ a browser:
 - stacks are stripped of origins and clamped to 2000 chars
 - unknown event kinds, vitals and enum values are dropped, not coerced
 
-Covered by `backend/__tests__/telemetryIngest.test.js` (32 tests), which asserts
-on the redactions and on the label domains rather than on implementation.
+Covered by `backend/__tests__/telemetryIngest.test.js`, which asserts on the
+redactions and on the label domains rather than on implementation.
+
+### A note on log field names
+
+Frontend events are logged with `component="frontend"` and
+`client_environment`, **not** `service` or `environment`. The base pino logger
+already sets those two, and a duplicate key in a JSON log line makes Loki's
+`| json` parser keep the *first* occurrence - so a filter on the second one
+matches nothing at all. This was found by querying Loki after the first
+production smoke test: `| json | service="frontend"` returned 0 lines while the
+raw text search returned 2. Anything added to these log lines in future must not
+shadow a field the base logger already emits.
 
 ## Environment variables
 
