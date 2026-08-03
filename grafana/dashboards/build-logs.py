@@ -29,6 +29,26 @@ PINO_MARK = r'`"service":"performance-tracker"`'
 # unstructured line from being counted as a module named "".
 PARSED = r'| json | __error__=""'
 
+# Browser events reach Loki through the backend: the page posts to
+# /api/telemetry and telemetry.routes.js logs them, so both origins share one
+# stream and one job. component is what separates them, and it is exact:
+# measured over 6h, component="frontend" was 182 lines, all of them
+# module="observability", against 25,683 for everything else, summing to the
+# 25,865 total. No backend binding uses that component.
+#
+# Each option is a whole label-filter fragment rather than a value plugged into
+# one, because "not frontend" cannot be written as an RE2 regex: Loki has no
+# negative lookahead, so `component=~"$origin"` could express Frontend and All
+# but never Backend.
+ORIGIN_OPTIONS = [
+    # A no-op filter rather than an empty string. An empty variable value works
+    # until someone saves the dashboard from the UI, and a matcher that always
+    # matches costs nothing.
+    ("All", r'| component=~".*"'),
+    ("Backend", r'| component!="frontend"'),
+    ("Frontend", r'| component="frontend"'),
+]
+
 
 panels = []
 pid = 0
@@ -77,7 +97,7 @@ y += 1
 panels.append(ts(
     "Errors and warnings over time",
     ['sum by (level) (count_over_time({job=~"$job"} |= "$search" ' + PARSED +
-     ' | level=~"error|warn" [$__interval]))'],
+     ' $origin | level=~"error|warn" [$__interval]))'],
     0, y, 12, 8, stack=True,
     desc="Read from the level field, not from which stream the line arrived on. "
          "This is the panel that answers \"did something start failing at 3am\", "
@@ -110,7 +130,7 @@ panels.append({
     "targets": targets(
         'label_replace('
         'topk(10, sum by (module) (count_over_time({job=~"$job"} '
-        '|= "$search" ' + PARSED + ' | level="error" [$__range])))'
+        '|= "$search" ' + PARSED + ' $origin | level="error" [$__range])))'
         ', "module", "(no module)", "module", "^$")',
         instant=True),
     # Loki answers with one frame per series, and the numeric field is called
@@ -151,9 +171,14 @@ panels.append({
     # Unstructured lines have no level field, so `| json | level=~"$level"` would
     # hide them entirely and the panel would stop showing Node's own crashes. The
     # or-clause keeps anything that failed to parse.
+    #
+    # $origin goes after that clause on purpose. An unparsed line has no
+    # component, which reads as empty, so Backend keeps it (empty != "frontend")
+    # and Frontend drops it. That is the right answer both ways: a line the
+    # logger never wrote is not a browser event.
     "targets": targets(
         '{job=~"$job", stream=~"$stream"} |= "$search" | json '
-        '| level=~"$level" or __error__="JSONParserErr"'),
+        '| level=~"$level" or __error__="JSONParserErr" $origin'),
     "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending",
                 "enableLogDetails": True, "dedupStrategy": "none",
                 "prettifyLogMessage": False},
@@ -221,6 +246,18 @@ dashboard = {
             "multi": True, "includeAll": True, "allValue": ".*",
         },
         {
+            "name": "origin", "label": "Origin", "type": "custom",
+            "query": ",".join(f"{text} : {value}" for text, value in ORIGIN_OPTIONS),
+            "options": [{"text": text, "value": value, "selected": text == "All"}
+                        for text, value in ORIGIN_OPTIONS],
+            # All by default: this splits an existing view rather than narrowing
+            # it, so nobody loses lines they were seeing before.
+            "current": {"text": ORIGIN_OPTIONS[0][0], "value": ORIGIN_OPTIONS[0][1]},
+            # Single select. Picking both is what All already is, and multi would
+            # interpolate the two fragments comma-separated into invalid LogQL.
+            "multi": False, "includeAll": False,
+        },
+        {
             "name": "search", "label": "Search", "type": "textbox",
             "query": "", "current": {"text": "", "value": ""},
         },
@@ -259,7 +296,31 @@ def assert_selectors_cannot_be_empty(dash):
                 )
 
 
+def assert_origin_reaches_every_parsed_panel(dash):
+    """A panel that parses the JSON can filter by origin, so it should.
+
+    The failure this catches is silent: a new panel added without $origin keeps
+    showing both origins while the picker says Frontend, and nothing about the
+    dashboard looks wrong. The unstructured-lines panel is exempt by
+    construction, since it never parses and so has no component to filter on.
+    """
+    for panel in dash["panels"]:
+        for target in panel.get("targets", []):
+            expr = target.get("expr", "")
+            if PARSED in expr and "$origin" not in expr:
+                raise SystemExit(
+                    f"panel {panel.get('title')!r} parses the log JSON but does "
+                    "not apply $origin, so the Origin picker would silently not "
+                    "apply to it."
+                )
+
+    for _, value in ORIGIN_OPTIONS:
+        if not value.startswith("|"):
+            raise SystemExit(f"origin option {value!r} is not a label filter fragment")
+
+
 assert_selectors_cannot_be_empty(dashboard)
+assert_origin_reaches_every_parsed_panel(dashboard)
 
 with open("grafana/dashboards/logs.json", "w") as f:
     json.dump(dashboard, f, indent=2)

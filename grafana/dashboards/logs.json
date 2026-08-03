@@ -51,7 +51,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (level) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" | level=~\"error|warn\" [$__interval]))",
+          "expr": "sum by (level) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" $origin | level=~\"error|warn\" [$__interval]))",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -175,7 +175,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "label_replace(topk(10, sum by (module) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" | level=\"error\" [$__range]))), \"module\", \"(no module)\", \"module\", \"^$\")",
+          "expr": "label_replace(topk(10, sum by (module) (count_over_time({job=~\"$job\"} |= \"$search\" | json | __error__=\"\" $origin | level=\"error\" [$__range]))), \"module\", \"(no module)\", \"module\", \"^$\")",
           "refId": "A",
           "queryType": "instant",
           "editorMode": "code"
@@ -279,7 +279,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\", stream=~\"$stream\"} |= \"$search\" | json | level=~\"$level\" or __error__=\"JSONParserErr\"",
+          "expr": "{job=~\"$job\", stream=~\"$stream\"} |= \"$search\" | json | level=~\"$level\" or __error__=\"JSONParserErr\" $origin",
           "refId": "A",
           "queryType": "range",
           "editorMode": "code"
@@ -392,6 +392,35 @@
         "multi": true,
         "includeAll": true,
         "allValue": ".*"
+      },
+      {
+        "name": "origin",
+        "label": "Origin",
+        "type": "custom",
+        "query": "All : | component=~\".*\",Backend : | component!=\"frontend\",Frontend : | component=\"frontend\"",
+        "options": [
+          {
+            "text": "All",
+            "value": "| component=~\".*\"",
+            "selected": true
+          },
+          {
+            "text": "Backend",
+            "value": "| component!=\"frontend\"",
+            "selected": false
+          },
+          {
+            "text": "Frontend",
+            "value": "| component=\"frontend\"",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "All",
+          "value": "| component=~\".*\""
+        },
+        "multi": false,
+        "includeAll": false
       },
       {
         "name": "search",
