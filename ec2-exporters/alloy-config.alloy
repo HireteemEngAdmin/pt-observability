@@ -16,21 +16,49 @@
 //
 // postgres-mcp-*.log is left out because it is not part of the application.
 
+// 3. `host` is deliberately NOT a target label. A positions entry is keyed by
+//    path AND labels, so any label that can change orphans every offset the
+//    file source has stored. constants.hostname is exactly such a label: an
+//    EC2 private DNS name follows the private IP, so a stop/start renames the
+//    host and the whole positions file stops matching. It is set below as a
+//    pipeline label instead, which keeps it queryable in Loki without letting
+//    it key the offsets.
+
 local.file_match "pm2" {
   path_targets = [
-    { __path__ = "/home/ec2-user/.pm2/logs/server-out*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "out", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/server-error*.log", __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "err", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/cron-out*.log",     __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "out", host = constants.hostname },
-    { __path__ = "/home/ec2-user/.pm2/logs/cron-error*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "err", host = constants.hostname },
+    { __path__ = "/home/ec2-user/.pm2/logs/server-out*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "out" },
+    { __path__ = "/home/ec2-user/.pm2/logs/server-error*.log", __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "server", stream = "err" },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-out*.log",     __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "out" },
+    { __path__ = "/home/ec2-user/.pm2/logs/cron-error*.log",   __path_exclude__ = "/home/ec2-user/.pm2/logs/*__*.log", job = "cron",   stream = "err" },
   ]
 }
 
 loki.source.file "pm2" {
   targets    = local.file_match.pm2.targets
   forward_to = [loki.process.pm2.receiver]
+
+  // Start at the end of a file whose offset we do not have, instead of reading
+  // it from byte zero. Without this, one lost or unmatched position replays the
+  // whole file: measured on the cron host on 2026-08-04, a boot at 16:02:17
+  // pushed 104,636 lines in a single minute against a baseline of 20 to 180,
+  // all of it six-day-old content from server-out-9.log, a 65 MB file last
+  // written on 07-30. Those lines arrive stamped with the time they were read,
+  // so they land in Loki as if they had just happened and every error count
+  // built on them is wrong.
+  //
+  // The cost is the opposite risk: lines written while Alloy is down are
+  // skipped rather than picked up on restart. That is the right trade for a
+  // pipeline whose job is to show what is happening now, and it only applies
+  // when the offset is missing. A normal restart still resumes exactly.
+  tail_from_end = true
 }
 
 loki.process "pm2" {
+  // Not a target label, see the note above the file matcher.
+  stage.static_labels {
+    values = { host = constants.hostname }
+  }
+
   // Fold multi-line object dumps back into the preceding entry.
   //
   // firstline matches "a line that does NOT start with a space, a tab or }":
