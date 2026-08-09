@@ -40,6 +40,24 @@ scrape_configs:
     static_configs:
       - targets: ['ec2-3-94-73-166.compute-1.amazonaws.com:9464']
 
+  # The CI poller, on the same host as the cron and for the same reason: it is the
+  # thing that runs CI now that GitHub Actions is suspended. Separate port because it
+  # is a separate PM2 process with its own lifecycle, and a separate job so a panel can
+  # tell "the poller is down" from "the cron is down".
+  #
+  # The one metric that justifies scraping it at all is
+  # ci_poller_last_poll_timestamp_seconds. If the poller stops, CI stops, and nothing
+  # else reports that: no build starts, no commit status is posted, and every pull
+  # request simply waits. Scrape failure alone is not enough to detect it, because a
+  # process that is up but wedged still answers; the timestamp going stale is what
+  # catches both.
+  #
+  # Same pinned Elastic IP hostname as the cron job above, for the reason documented
+  # there.
+  - job_name: ci-poller
+    static_configs:
+      - targets: ['ec2-3-94-73-166.compute-1.amazonaws.com:9465']
+
   - job_name: node
     scheme: https
     basic_auth:
