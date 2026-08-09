@@ -1,0 +1,243 @@
+# Alert rules for the CI poller and the deploys it runs.
+#
+# These are the first alert rules this stack has ever had. Until now prometheus.yml
+# carried no `rule_files` and no `alerting` block, and there is no Alertmanager, so
+# backend/scripts/lu-ops/alert-rules.yaml in the application repo has never been loaded
+# by anything. Grafana 11 has unified alerting built in, which is why these live here
+# and need no new container.
+#
+# There is deliberately no contact point yet. contactpoints.yml.example and
+# policies.yml.example are the Teams webhook, still pending approval; renaming those two
+# files is all it takes for every rule below to start routing, with no change here.
+# Until then these fire into the Grafana UI only, which catches a red main during the
+# day and will not wake anyone at night. That is a known limit, chosen deliberately.
+#
+# Two rules that could have been written are not, and the reasons matter more than the
+# rules would have:
+#
+#   MainGreenButNotDeployed. Automatic deploys are off (CI_POLLER_DEPLOY), so main is
+#   green and undeployed by design right now. Shipping it today means an alert that is
+#   red from the first minute, and an alert that is always red teaches people to ignore
+#   the whole page. Add it with the flag.
+#
+#   SpotReclaimStorm. Reclaims are expected: Spot carries the work at roughly a third of
+#   the price and the first build ever run here was reclaimed. Without a measured normal
+#   rate any threshold is a guess, and a guessed threshold is how alert fatigue starts.
+#
+# noDataState is set per rule and is not boilerplate. For the watchdog, the metric going
+# missing IS the failure, so it alerts. For everything else absence means the thing has
+# simply not happened yet, so it stays OK.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: ci
+    folder: Performance Tracker
+    interval: 1m
+    rules:
+      # The one that justifies the rest. If the poller stops, CI stops silently: no
+      # build starts, no commit status is posted, and every pull request just waits.
+      # Nothing else in the system reports that.
+      - uid: ci-poller-stalled
+        title: CIPollerStalled
+        condition: THRESHOLD
+        # Alerting, not OK: a scrape that returns nothing means the process is gone or
+        # wedged, which is exactly the condition this exists to catch. Every other rule
+        # here treats missing data as "has not happened yet"; this one cannot.
+        noDataState: Alerting
+        execErrState: Error
+        # The poller cycles every 60s and restarts on its own deploys. Two minutes past
+        # a five minute threshold rides out a restart without riding out a real stall.
+        for: 2m
+        labels: { severity: p1, service: ci }
+        annotations:
+          summary: The CI poller has not completed a cycle in over 5 minutes
+          description: >-
+            CI is not running. Nothing else reports this: builds do not start and pull
+            requests wait without a status. Check `pm2 logs ci-poller` on the cron host.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: time() - ci_poller_last_poll_timestamp_seconds
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [300] }
+
+      - uid: ci-main-red
+        title: CIMainRed
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        labels: { severity: p2, service: ci }
+        annotations:
+          summary: main has been failing validation for over 30 minutes
+          description: >-
+            The last build of main failed and nothing has fixed it since. Deploys are
+            gated on a green main, so this also means nothing can ship.
+        data:
+          # Both series carry ref_type="main", so the comparison matches label for label
+          # and returns the failure timestamp when it is the more recent of the two.
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: >-
+                (ci_last_failure_timestamp_seconds{ref_type="main"}
+                > ci_last_success_timestamp_seconds{ref_type="main"}) > bool 0
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: ci-queue-backlog
+        title: CIQueueBacklog
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        labels: { severity: p2, service: ci }
+        annotations:
+          summary: The CI queue has been above 5 for 15 minutes
+          description: >-
+            Builds are arriving faster than they finish. The poller runs one at a time
+            because its checkout is shared, so a sustained queue means the backlog only
+            grows. A burst after several merges is normal; sustained is not.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: ci_queue_depth
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [5] }
+
+  - orgId: 1
+    name: deploys
+    folder: Performance Tracker
+    interval: 1m
+    rules:
+      - uid: deploy-failed
+        title: DeployFailed
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: { severity: p1, service: deploy }
+        annotations:
+          summary: An automatic deploy failed
+          description: >-
+            A failed deploy has nowhere else to report. The commit status already says
+            the code is good, and it is: what failed is putting it out there. The stage
+            label says how far it got, and `verify` is the interesting one, because it
+            means every step succeeded and the wrong code is serving.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: sum(increase(deploy_total{status="failure"}[10m]))
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # The failure the deploy scripts have always worked around blind: an aborted
+      # `git pull` leaves the old tree serving while every step reports success.
+      - uid: deploy-version-mismatch
+        title: DeployedVersionMismatch
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels: { severity: p1, service: deploy }
+        annotations:
+          summary: A host is not running the commit the deploy shipped
+          description: >-
+            The poller read app_build_info back off the host and it disagrees with the
+            SHA it just deployed. Every deploy step reported success and the wrong code
+            is serving. Compare the version table on the CI and Deploys dashboard.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: min(deploy_version_verified)
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: hosts-out-of-sync
+        title: HostsOutOfSync
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        # A deploy legitimately makes the hosts disagree while it walks from the server
+        # to the cron. Twenty minutes is far longer than that gap and far shorter than
+        # anyone would tolerate the drift.
+        for: 20m
+        labels: { severity: p2, service: deploy }
+        annotations:
+          summary: The server and the cron are running different commits
+          description: >-
+            A deploy reached one host and not the other. Until app_build_info existed
+            this was only discoverable by sshing into each host and running
+            `git rev-parse`, which is why it could persist unnoticed.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: count(count by (commit) (app_build_info))
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [1] }
