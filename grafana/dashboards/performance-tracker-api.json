@@ -741,7 +741,7 @@
     },
     {
       "type": "row",
-      "title": "Node processes (api and cron)",
+      "title": "Who the API is refusing",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -753,15 +753,545 @@
       "panels": []
     },
     {
+      "type": "stat",
+      "title": "Users refused",
+      "description": "Distinct signed-in users that got a 4xx or 5xx in this window. The number is the shape of the problem: two is somebody's bad afternoon, and 186 was the render loop of 2026-08-11. Unauthenticated requests are excluded here, so this can read one lower than the bar gauge below, which does show them.",
+      "id": 14,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(count by (userId) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" | userId != \"\" [$__range])))",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Tenants refused",
+      "description": "Distinct tenants behind those users. One tenant with many users is a client whose whole office is affected; many tenants is ours.",
+      "id": 15,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 29
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(count by (tenantId) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" | tenantId != \"\" [$__range])))",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Refusals",
+      "description": "Every 4xx and 5xx the API answered in this window, including the 429s the rate limiter produced.",
+      "id": 16,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 29
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" [$__range]))",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Users refused most (top 10)",
+      "description": "One bar per user id. The empty bucket is renamed rather than hidden: requests with no user are unauthenticated traffic, which is worth seeing next to the rest instead of silently dropped. Concentration is the signal here, not the total. On 2026-08-11 four people out of 139 supplied 55% of a million refusals, and every one of them was a browser tab in a render loop rather than a person doing anything.",
+      "id": 17,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "label_replace(topk(10, sum by (userId) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" [$__range]))), \"userId\", \"(not signed in)\", \"userId\", \"^$\")",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Tenants refused most (top 10)",
+      "description": "The same window grouped by tenant. Read it against the panel beside it: one tenant made of one user is a single stuck client, and one tenant made of many is something that reached the whole office.",
+      "id": 18,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "label_replace(topk(10, sum by (tenantId) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" [$__range]))), \"tenantId\", \"(no tenant)\", \"tenantId\", \"^$\")",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Paths refused most (top 10)",
+      "description": "path is the normalised url, ids collapsed to :id and the query string dropped. It is recorded only when no handler matched, which is the case for everything the rate limiter refuses, so this is the panel that separates /api/time-tracker/init from /api/time-tracker/start - one label upstairs, two very different problems. A request that did reach a handler has no path and is named by the bucket instead.",
+      "id": 19,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "label_replace(topk(10, sum by (path) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" [$__range]))), \"path\", \"(a handler matched, see route)\", \"path\", \"^$\")",
+          "refId": "A",
+          "queryType": "instant",
+          "editorMode": "code"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Refusals by status over time",
+      "description": "A range query rather than a top-N: statusCode is a closed set, so it cannot blow up the way a user or path grouping would. Each point is a count inside one interval bucket, not a rate, which is how the logs board draws the same shape. 429 climbing on its own is the rate limiter doing its job against a client that will not stop; 401 and 403 climbing together is usually a session or company-scope problem.",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (statusCode) (count_over_time({job=\"server\"} | json | msg=~\"request rejected|request failed\" [$__interval]))",
+          "legendFormat": "{{statusCode}}",
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Node processes (api and cron)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "id": 21,
+      "collapsed": false,
+      "panels": []
+    },
+    {
       "type": "timeseries",
       "title": "Event loop lag p99",
       "description": "Event loop delay per process. Phase 6 alert fires above 0.2.",
-      "id": 14,
+      "id": 22,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 29
+        "y": 54
       },
       "datasource": {
         "type": "prometheus",
@@ -826,12 +1356,12 @@
       "type": "timeseries",
       "title": "Heap used",
       "description": "V8 heap in use, per process.",
-      "id": 15,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 29
+        "y": 54
       },
       "datasource": {
         "type": "prometheus",
@@ -896,12 +1426,12 @@
       "type": "timeseries",
       "title": "Restarts per hour",
       "description": "process_start_time_seconds changes whenever the process restarts. Deploys count too (pm2 reload). Phase 6 alert fires above 3/h.",
-      "id": 16,
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 29
+        "y": 54
       },
       "datasource": {
         "type": "prometheus",
@@ -969,9 +1499,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 62
       },
-      "id": 17,
+      "id": 25,
       "collapsed": false,
       "panels": []
     },
@@ -979,12 +1509,12 @@
       "type": "timeseries",
       "title": "Waiting for a connection",
       "description": "Queries queued because every connection is checked out. Anything sustained above zero means the pool is the bottleneck, not the database and not CPU. On 2026-07-30 this shape produced 503s from the API Gateway while the app itself never returned a 5xx.",
-      "id": 18,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 38
+        "y": 63
       },
       "datasource": {
         "type": "prometheus",
@@ -1049,12 +1579,12 @@
       "type": "timeseries",
       "title": "In use and available",
       "description": "Checked out against idle. Available at zero with in use at the ceiling is the saturated state; read it together with the waiting panel.",
-      "id": 19,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 38
+        "y": 63
       },
       "datasource": {
         "type": "prometheus",
@@ -1130,12 +1660,12 @@
       "type": "timeseries",
       "title": "Saturation against the configured ceiling",
       "description": "in use over db_pool_max, so the limit is not hardcoded here. The ceiling is per process, so two api workers at 100% is twice the connections of one.",
-      "id": 20,
+      "id": 28,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 38
+        "y": 63
       },
       "datasource": {
         "type": "prometheus",
@@ -1198,259 +1728,14 @@
     },
     {
       "type": "row",
-      "title": "Database queries (all processes)",
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 46
-      },
-      "id": 28,
-      "collapsed": false,
-      "panels": []
-    },
-    {
-      "type": "timeseries",
-      "title": "Query duration p50 / p95 / p99",
-      "description": "Time inside the database, across every process that talks to it. Before this metric existed the only duration data was pg_stat_statements, which is cumulative since reset and keeps no history, so a slow hour was invisible once it passed. Client-side statement_timeout is 15s: a percentile parked at 15 means queries are being killed at the ceiling, not merely running slowly.",
-      "id": 29,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 47
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
-          "legendFormat": "p50",
-          "refId": "A",
-          "editorMode": "code",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
-          "legendFormat": "p95",
-          "refId": "B",
-          "editorMode": "code",
-          "range": true
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(db_query_duration_seconds_bucket[5m])))",
-          "legendFormat": "p99",
-          "refId": "C",
-          "editorMode": "code",
-          "range": true
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Query duration p99 by operation",
-      "description": "Which kind of statement is slow. Read it with the rate panel beside it, never alone: update and delete run rarely enough that one slow call can post a dramatic p99 while contributing almost nothing to load. start, commit and rollback are transaction overhead, so a rise there points at lock contention rather than at any one query.",
-      "id": 30,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 47
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le, operation) (rate(db_query_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{operation}}",
-          "refId": "A",
-          "editorMode": "code",
-          "range": true
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Queries/s by operation",
-      "description": "The weight behind the percentiles beside it. A p99 is only meaningful where there is traffic to draw it from. This also reads as an n+1 detector: request rate flat while select rate climbs means one request is doing more round trips than it used to.",
-      "id": 31,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 47
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (operation) (rate(db_queries_total[5m]))",
-          "legendFormat": "{{operation}}",
-          "refId": "A",
-          "editorMode": "code",
-          "range": true
-        }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": true,
-            "scaleDistribution": {
-              "type": "linear"
-            }
-          },
-          "color": {
-            "mode": "palette-classic"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "row",
       "title": "LearnUpon",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 71
       },
-      "id": 21,
+      "id": 29,
       "collapsed": false,
       "panels": []
     },
@@ -1458,12 +1743,12 @@
       "type": "timeseries",
       "title": "Queues over time",
       "description": "max() deduplicates: the gauges arrive from both the api and cron jobs with the same value.",
-      "id": 22,
+      "id": 30,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1553,12 +1838,12 @@
       "type": "timeseries",
       "title": "Webhook processing p95",
       "description": "Time spent dispatching an event to its handler, by type.",
-      "id": 23,
+      "id": 31,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1622,13 +1907,13 @@
     {
       "type": "timeseries",
       "title": "Webhooks received/s by type",
-      "description": "Emitted by the api job — webhooks come in through the API.",
-      "id": 24,
+      "description": "Emitted by the api job \u2014 webhooks come in through the API.",
+      "id": 32,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 80
       },
       "datasource": {
         "type": "prometheus",
@@ -1693,12 +1978,12 @@
       "type": "timeseries",
       "title": "Events processed/s by status",
       "description": "Emitted by the cron job. status=failed climbing precedes dead letter growth.",
-      "id": 25,
+      "id": 33,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 80
       },
       "datasource": {
         "type": "prometheus",
@@ -1766,22 +2051,22 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 88
       },
-      "id": 26,
+      "id": 34,
       "collapsed": false,
       "panels": []
     },
     {
       "type": "logs",
       "title": "Errors and warnings",
-      "id": 27,
+      "id": 35,
       "description": "Error and warning lines from the API, read from the level field. filename tells the two clustered instances apart (server-out-8 vs server-out-9). Lines that fail to parse are kept: those are the crashes that never reach the logger, and dropping them would hide exactly the worst failures.",
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 89
       },
       "datasource": {
         "type": "loki",

@@ -2,6 +2,19 @@ import json
 
 DS = {"type": "prometheus", "uid": "prometheus"}
 
+# Per-user work has no Prometheus dimension and is not going to get one: the http
+# histogram is labelled method/route/status_code on purpose, and a user id is
+# unbounded cardinality. Loki carries userId and tenantId on every request line,
+# so the "who" panels below read from there.
+LOKI = {"type": "loki", "uid": "loki"}
+
+# What the request logger writes for a response it refused. `request rate limited`
+# is deliberately NOT here: that line is written by the limiter itself and carries
+# no user ("the address is deliberately absent"), so summing by userId over it
+# returns one anonymous bucket. requestLogger logs the same requests anyway, 429
+# included, and those lines do carry the user.
+REFUSED = r'| json | msg=~"request rejected|request failed"'
+
 panels = []
 pid = 0
 
@@ -59,6 +72,71 @@ def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, 
             "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}]},
         }, "overrides": []},
     }
+
+
+def loki_targets(*exprs, instant=False):
+    return [{"datasource": LOKI, "expr": e, "refId": chr(65 + i),
+             "queryType": "instant" if instant else "range", "editorMode": "code"}
+            for i, e in enumerate(exprs)]
+
+
+def loki_stat(title, expr, x, y, w=8, h=4, desc=""):
+    return {
+        "type": "stat", "title": title, "description": desc, "id": nid(),
+        "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": LOKI,
+        "targets": loki_targets(expr, instant=True),
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+                    "colorMode": "value", "graphMode": "none", "textMode": "auto",
+                    "justifyMode": "auto", "orientation": "auto"},
+        "fieldConfig": {"defaults": {"unit": "short", "mappings": [],
+                                     "thresholds": {"mode": "absolute",
+                                                    "steps": [{"color": "text", "value": None}]}},
+                        "overrides": []},
+    }
+
+
+def loki_bar(title, expr, x, y, w=12, h=10, desc=""):
+    """Top-N over the window as a bar gauge.
+
+    instant, not range: a range query evaluates the topk at every step, so the
+    panel receives N series times ~45 steps and draws unreadable slivers instead
+    of N bars. Top-N over a window is a single evaluation.
+
+    Loki answers with one frame per series and calls the numeric field "Value" in
+    all of them; the label exists only in the frame's labels. labelsToFields
+    promotes it, merge folds the frames into one table, and values:true then draws
+    one bar per row. A displayName template cannot do this - it is resolved before
+    the frames are merged.
+    """
+    return {
+        "type": "bargauge", "title": title, "description": desc, "id": nid(),
+        "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": LOKI,
+        "targets": loki_targets(expr, instant=True),
+        "transformations": [
+            {"id": "labelsToFields", "options": {}},
+            {"id": "merge", "options": {}},
+            {"id": "sortBy", "options": {"sort": [{"field": "Value #A", "desc": True}]}},
+            {"id": "organize", "options": {"excludeByName": {"Time": True}}},
+        ],
+        "options": {"orientation": "horizontal", "displayMode": "gradient",
+                    "showUnfilled": True, "valueMode": "text", "minVizWidth": 8,
+                    "minVizHeight": 16, "namePlacement": "left", "sizing": "auto",
+                    "reduceOptions": {"calcs": [], "fields": "", "values": True}},
+        "fieldConfig": {"defaults": {
+            "unit": "short", "min": 0,
+            "color": {"mode": "continuous-BlPu"},
+            "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}]},
+        }, "overrides": []},
+    }
+
+
+def loki_ts(title, specs, x, y, w=12, h=8, unit="short", desc=""):
+    panel = ts(title, specs, x, y, w=w, h=h, unit=unit, desc=desc, minv=0)
+    panel["datasource"] = LOKI
+    panel["targets"] = [{"datasource": LOKI, "expr": e, "legendFormat": lf,
+                         "refId": chr(65 + i), "queryType": "range", "editorMode": "code"}
+                        for i, (e, lf) in enumerate(specs)]
+    return panel
 
 
 DEDUP = ("max() because the gauge is exposed by both the api and cron jobs, which query the "
@@ -161,8 +239,84 @@ panels.append(ts(
     12, y, w=12, h=6, unit="reqps", minv=0,
     desc="Useful for spotting 4xx climbing before it turns into an incident."))
 
-# ── Node processes ───────────────────────────────────────────────
+# ── Who the API is refusing ──────────────────────────────────────
+#
+# READ THE TITLES LITERALLY. These are refusals, not traffic.
+#
+# A successful request is logged at debug and production does not emit debug, so
+# `request completed` reaches Loki zero times. Measured over 6h: 43,886 lines of
+# `request rejected` and not one of `request completed`. There is no per-user view
+# of ordinary traffic anywhere in this stack, and these panels are not it. They
+# answer "who is the API saying no to", which is the question an incident asks.
+#
+# The user column is a uuid because the request line carries no name. Resolving it
+# needs the database; the dashboard cannot.
 y += 6
+panels.append(row("Who the API is refusing", y))
+y += 1
+panels.append(loki_stat(
+    "Users refused", 'count(count by (userId) (count_over_time({job="server"} '
+    + REFUSED + ' | userId != "" [$__range])))', 0, y, w=8,
+    desc="Distinct signed-in users that got a 4xx or 5xx in this window. The number is "
+         "the shape of the problem: two is somebody's bad afternoon, and 186 was the "
+         "render loop of 2026-08-11. Unauthenticated requests are excluded here, so this "
+         "can read one lower than the bar gauge below, which does show them."))
+panels.append(loki_stat(
+    "Tenants refused", 'count(count by (tenantId) (count_over_time({job="server"} '
+    + REFUSED + ' | tenantId != "" [$__range])))', 8, y, w=8,
+    desc="Distinct tenants behind those users. One tenant with many users is a client "
+         "whose whole office is affected; many tenants is ours."))
+panels.append(loki_stat(
+    "Refusals", 'sum(count_over_time({job="server"} ' + REFUSED + ' [$__range]))',
+    16, y, w=8,
+    desc="Every 4xx and 5xx the API answered in this window, including the 429s the "
+         "rate limiter produced."))
+y += 4
+panels.append(loki_bar(
+    "Users refused most (top 10)",
+    'label_replace(topk(10, sum by (userId) (count_over_time({job="server"} '
+    + REFUSED + ' [$__range]))), "userId", "(not signed in)", "userId", "^$")',
+    0, y, w=12,
+    desc="One bar per user id. The empty bucket is renamed rather than hidden: requests "
+         "with no user are unauthenticated traffic, which is worth seeing next to the "
+         "rest instead of silently dropped. "
+         "Concentration is the signal here, not the total. On 2026-08-11 four people out "
+         "of 139 supplied 55% of a million refusals, and every one of them was a browser "
+         "tab in a render loop rather than a person doing anything."))
+panels.append(loki_bar(
+    "Tenants refused most (top 10)",
+    'label_replace(topk(10, sum by (tenantId) (count_over_time({job="server"} '
+    + REFUSED + ' [$__range]))), "tenantId", "(no tenant)", "tenantId", "^$")',
+    12, y, w=12,
+    desc="The same window grouped by tenant. Read it against the panel beside it: one "
+         "tenant made of one user is a single stuck client, and one tenant made of many "
+         "is something that reached the whole office."))
+y += 10
+panels.append(loki_bar(
+    "Paths refused most (top 10)",
+    'label_replace(topk(10, sum by (path) (count_over_time({job="server"} '
+    + REFUSED + ' [$__range]))), "path", "(a handler matched, see route)", "path", "^$")',
+    0, y, w=12,
+    desc="path is the normalised url, ids collapsed to :id and the query string dropped. "
+         "It is recorded only when no handler matched, which is the case for everything "
+         "the rate limiter refuses, so this is the panel that separates "
+         "/api/time-tracker/init from /api/time-tracker/start - one label upstairs, two "
+         "very different problems. A request that did reach a handler has no path and is "
+         "named by the bucket instead."))
+panels.append(loki_ts(
+    "Refusals by status over time",
+    [('sum by (statusCode) (count_over_time({job="server"} ' + REFUSED
+      + ' [$__interval]))', "{{statusCode}}")],
+    12, y, w=12,
+    desc="A range query rather than a top-N: statusCode is a closed set, so it cannot "
+         "blow up the way a user or path grouping would. Each point is a count inside "
+         "one interval bucket, not a rate, which is how the logs board draws the same "
+         "shape. 429 climbing on its own is the rate limiter doing its job against a "
+         "client that will not stop; 401 and 403 climbing together is usually a session "
+         "or company-scope problem."))
+
+# ── Node processes ───────────────────────────────────────────────
+y += 10
 panels.append(row("Node processes (api and cron)", y))
 y += 1
 panels.append(ts(
