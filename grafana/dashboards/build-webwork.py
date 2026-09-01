@@ -51,11 +51,16 @@ def row(title, y):
 
 
 def stat(title, expr, x, y, w=4, h=4, unit="short", desc="", steps=None, legend="",
-         mappings=None, dec=None):
+         mappings=None, dec=None, expr2=None, legend2=None):
+    # expr2/legend2 put a second series in the same panel, so two related numbers
+    # (e.g. one per caller) render as two value boxes side by side instead of a
+    # single blended one. Omitted, this behaves exactly as a one-series stat.
+    exprs = (expr,) if expr2 is None else (expr, expr2)
+    legends = legend if expr2 is None else [legend, legend2]
     return {
         "type": "stat", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": PROM,
-        "targets": prom(expr, legend=legend, instant=True),
+        "targets": prom(*exprs, legend=legends, instant=True),
         "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                     "colorMode": "value", "graphMode": "none", "textMode": "auto"},
         "fieldConfig": {"defaults": {
@@ -140,8 +145,31 @@ def logs(title, expr, x, y, w=24, h=12, desc=""):
 UP_MAP = [{"options": {"0": {"text": "DOWN", "color": "red"},
                        "1": {"text": "UP", "color": "green"}}, "type": "value"}]
 
-# ── Overview ─────────────────────────────────────────────────────
+# ── Where WebWork is called from ────────────────────────────────
+# Since the clock service launched, WebWork has two callers, not one. This row
+# exists so that fact is visible at the top of the board instead of implied by
+# an Overview that quietly still counts the portal alone.
 y = 0
+panels.append(row("Where WebWork is called from", y))
+y += 1
+panels.append(ts(
+    "Call volume by origin",
+    ['sum(rate(webwork_requests_total[$__rate_interval]))',
+     'sum(clock_webwork_calls) / 300'],
+    ["Portal", "Clock service"], 0, y, w=24, unit="reqps",
+    desc="Both callers of WebWork on one scale. clock_webwork_calls is a gauge holding "
+         "CloudWatch's SampleCount of the Lambda's WebWork calls over the poller's "
+         "five-minute window, summed across brands; dividing by 300 (seconds) converts that "
+         "to calls per second, the same unit rate() gives the portal line, so the two sit on "
+         "one axis. That is a different divisor from the /5 used on the Requests / min stat "
+         "below, which wants calls per minute instead of per second. Neither line here is "
+         "scoped by the job/endpoint/method/status filters above: the portal query is "
+         "intentionally a bare total so it stays comparable to the clock line, and the clock "
+         "line carries none of those labels to begin with, so filtering by, say, one endpoint "
+         "leaves this whole panel unchanged. That is expected, not a bug."))
+y += 8
+
+# ── Overview ─────────────────────────────────────────────────────
 panels.append(row("Overview", y))
 y += 1
 panels.append(stat(
@@ -167,11 +195,15 @@ panels.append(stat(
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 3600},
            {"color": "red", "value": 86400}]))
 panels.append(stat(
-    "Success rate",
+    "Success rate (portal)",
     f'sum(rate(webwork_requests_total{{{SEL}, status=~"2..|3.."}}[$__range])) '
     f'/ sum(rate(webwork_requests_total{{{SEL}}}[$__range]))',
     6, y, w=3, unit="percentunit", dec=2,
-    desc="Share of calls answered with 2xx or 3xx over the selected range.",
+    desc="Share of the portal's calls answered with 2xx or 3xx over the selected range. "
+         "Portal only, not blended with the clock service: the Lambda publishes success and "
+         "failure counts for the whole punch (auth, DynamoDB and WebWork together), not an "
+         "outcome for the WebWork call alone, so there is no honest way to fold it into this "
+         "number without inventing one.",
     steps=[{"color": "red", "value": None}, {"color": "orange", "value": 0.95},
            {"color": "green", "value": 0.99}]))
 panels.append(stat(
@@ -184,9 +216,16 @@ panels.append(stat(
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 0.01},
            {"color": "red", "value": 0.05}]))
 panels.append(stat(
-    "Requests / min", f'sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) * 60',
+    "Requests / min",
+    f'sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) * 60 + sum(clock_webwork_calls) / 5',
     12, y, w=3, dec=1,
-    desc="WebWork's documented ceiling is 60/min per workspace."))
+    desc="Portal calls per minute plus the clock service's. clock_webwork_calls is a gauge "
+         "holding CloudWatch's SampleCount over the poller's five-minute window, so dividing "
+         "by 5 (not 300, which is the /second divisor used on the row above) converts it to "
+         "calls per minute before adding it to the portal rate. WebWork's documented ceiling "
+         "is 60/min per workspace. The clock term is not scoped by the job/endpoint/method/"
+         "status filters above: it carries none of those labels, so it always reflects all "
+         "clock traffic regardless of what this dashboard is filtered to."))
 panels.append(stat(
     "Requests (range)",
     f'sum(increase(webwork_requests_total{{{SEL_STATUS}}}[$__range])) or vector(0)',
@@ -202,6 +241,14 @@ panels.append(stat(
     "Latency p95",
     f'histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[5m])))',
     18, y, w=3, unit="s", dec=2,
+    legend="Portal p95", expr2='avg(clock_webwork_call_duration_seconds)',
+    legend2="Clock mean",
+    desc="Portal p95 and the clock service's mean side by side, each labelled with its own "
+         "statistic, rather than blended into one number. CloudWatch publishes "
+         "clock_webwork_call_duration_seconds as an Average, not a percentile, so combining "
+         "it with the portal's p95 would produce a figure belonging to neither. The clock "
+         "value is not scoped by the job/endpoint/method/status filters above: it carries "
+         "none of those labels.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2},
            {"color": "red", "value": 5}]))
 panels.append(stat(
@@ -462,6 +509,32 @@ panels.append(ts(
     desc="How much WebWork traffic one reconcile run generates — the number to watch against "
          "the 60/min ceiling."))
 y += 8
+panels.append({
+    "type": "table", "title": "Clock service jobs: last run status", "id": nid(),
+    "description":
+        "clock-events-drain and clock-context-sync run as cron jobs too, but they publish "
+        "cronjob_* metrics, not webwork_job_*, so every panel above this one never sees them. "
+        "Only the current status is set to 1 upstream, one series per status, so `== 1` turns "
+        "that into a readable label instead of a numeric code to remember. Not scoped by the "
+        "job/endpoint/method/status filters above: cronjob_last_run_status carries none of "
+        "those labels.",
+    "gridPos": {"h": 6, "w": 24, "x": 0, "y": y}, "datasource": PROM,
+    "targets": [{"datasource": PROM, "refId": "A", "editorMode": "code", "instant": True,
+                 "range": False, "format": "table",
+                 "expr": 'max by (job_name, status) '
+                         '(cronjob_last_run_status{job_name=~"clock-.*"} == 1)'}],
+    "transformations": [
+        {"id": "organize", "options": {
+            "excludeByName": {"Time": True, "Value": True},
+            "renameByName": {"job_name": "Job", "status": "Last status"},
+            "indexByName": {"job_name": 0, "status": 1},
+        }},
+    ],
+    "options": {"showHeader": True, "cellHeight": "sm", "footer": {"show": False}},
+    "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"},
+                                            "filterable": True}}, "overrides": []},
+})
+y += 6
 panels.append(logs(
     "Job logs", '{job=~"server|cron"} | json | module = `webwork` | job_execution_id != ``', 0, y, h=10,
     desc="Start, completion and failure lines for the reconcile job, with duration, record "
