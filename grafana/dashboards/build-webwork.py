@@ -284,7 +284,7 @@ panels.append(stat(
         ]}}],
     }]))
 panels.append(stat(
-    "HTTP 429 (range)", f'sum(increase(webwork_rate_limited_total{{endpoint=~"$endpoint"}}[$__range])) or vector(0)',
+    "429s (range)", f'sum(increase(webwork_rate_limited_total{{endpoint=~"$endpoint"}}[$__range])) or vector(0)',
     22, y, w=2, dec=0,
     desc="Rate-limited responses over the selected range.",
     steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}]))

@@ -614,7 +614,7 @@
     },
     {
       "type": "stat",
-      "title": "HTTP 429 (range)",
+      "title": "429s (range)",
       "description": "Rate-limited responses over the selected range.",
       "id": 11,
       "gridPos": {
