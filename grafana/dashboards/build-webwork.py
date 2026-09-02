@@ -51,18 +51,26 @@ def row(title, y):
 
 
 def stat(title, expr, x, y, w=4, h=4, unit="short", desc="", steps=None, legend="",
-         mappings=None, dec=None):
+         mappings=None, dec=None, expr2=None, legend2=None, overrides=None):
+    # expr2/legend2 put a second series in the same panel, so two related numbers
+    # (e.g. one per caller) render as two value boxes side by side instead of a
+    # single blended one. Omitted, this behaves exactly as a one-series stat.
+    # overrides lets `steps` (the base thresholds) apply to only one of the two
+    # fields by name, for a panel whose two series are different statistics that
+    # should not share one colour scale.
+    exprs = (expr,) if expr2 is None else (expr, expr2)
+    legends = legend if expr2 is None else [legend, legend2]
     return {
         "type": "stat", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": PROM,
-        "targets": prom(expr, legend=legend, instant=True),
+        "targets": prom(*exprs, legend=legends, instant=True),
         "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                     "colorMode": "value", "graphMode": "none", "textMode": "auto"},
         "fieldConfig": {"defaults": {
             "unit": unit, "decimals": dec, "mappings": mappings or [],
             "thresholds": {"mode": "absolute",
                            "steps": steps or [{"color": "text", "value": None}]},
-        }, "overrides": []},
+        }, "overrides": overrides or []},
     }
 
 
@@ -140,8 +148,60 @@ def logs(title, expr, x, y, w=24, h=12, desc=""):
 UP_MAP = [{"options": {"0": {"text": "DOWN", "color": "red"},
                        "1": {"text": "UP", "color": "green"}}, "type": "value"}]
 
-# ── Overview ─────────────────────────────────────────────────────
+# clock_webwork_calls and clock_webwork_call_duration_seconds are gauges a
+# CloudWatch poller overwrites every five minutes with the Lambda's own
+# already-aggregated figure (a SampleCount, an Average), not a per-instance
+# count that partitions work across processes. Every use of either below
+# aggregates with max(), never sum() or a bare avg(), for the same reason
+# build-performance-tracker-api.py documents at length for the sibling
+# aws_lambda_* gauges: summing what a second cron host publishing the
+# identical reading would double the number, and max() is also what lets
+# `or vector(0)` replace a missing series instead of unioning a permanent
+# phantom zero in beside a real one (both strip labels to `{}` first, which
+# is what a label-less vector(0) needs to match against). Harmless today
+# with one cron target; wrong the moment there are two.
+
+# ── Where WebWork is called from ────────────────────────────────
+# Since the clock service launched, WebWork has two callers, not one. This row
+# exists so that fact is visible at the top of the board instead of implied by
+# an Overview that quietly still counts the portal alone.
 y = 0
+panels.append(row("Where WebWork is called from", y))
+y += 1
+panels.append(ts(
+    "Call volume by origin",
+    ['sum(rate(webwork_requests_total[$__rate_interval]))',
+     'max(avg_over_time(clock_webwork_calls[$__interval])) / 300'],
+    ["Portal", "Clock service"], 0, y, w=24, unit="reqps",
+    desc="Both callers of WebWork on one scale. clock_webwork_calls is a gauge holding "
+         "CloudWatch's SampleCount of the Lambda's WebWork calls over the poller's "
+         "five-minute window, summed across brands upstream; dividing by 300 (seconds) "
+         "converts that to calls per second, the same unit rate() gives the portal line. "
+         "Wrapped in max(), not sum(): this gauge mirrors one upstream CloudWatch figure "
+         "rather than partitioning work across processes, so a second cron host publishing "
+         "the same reading would double it under sum(). avg_over_time over $__interval, "
+         "rather than a bare instant read, makes the clock line average over the same step "
+         "the portal's rate() smooths over at this zoom level, instead of point-sampling "
+         "whichever single 5-minute window the step happens to land on. That said, "
+         "avg_over_time only starts actually averaging multiple polls once $__interval "
+         "exceeds the poller's 300s window, which needs a range wider than roughly 3.5 days "
+         "at this dashboard's resolution; at the common 6h and 24h zooms $__interval is well "
+         "under 300s, so the clock line is still one held 5-minute sample per step, not a "
+         "genuine average, and will step in blocks where the portal line curves smoothly. "
+         "That is a different divisor from the /5 used on the Requests / min stat below, "
+         "which wants calls per minute instead of per second. clock_webwork_calls is only "
+         "overwritten when CloudWatch returns a datapoint; a quiet or broken poll leaves it "
+         "holding its last value indefinitely, so an idle clock service and a broken one "
+         "look identical on this line, unlike the portal's rate() which correctly falls to "
+         "zero when calls stop. Neither line here applies the job/endpoint/method/status "
+         "filters above: the portal query is intentionally a bare total so it stays "
+         "comparable to the clock line, and the clock query has no such selector applied to "
+         "it either, by choice, not because the underlying series lacks those labels. So "
+         "filtering by, say, one endpoint leaves this whole panel unchanged, and that is "
+         "expected, not a bug."))
+y += 8
+
+# ── Overview ─────────────────────────────────────────────────────
 panels.append(row("Overview", y))
 y += 1
 panels.append(stat(
@@ -167,26 +227,51 @@ panels.append(stat(
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 3600},
            {"color": "red", "value": 86400}]))
 panels.append(stat(
-    "Success rate",
+    "Success rate (portal)",
     f'sum(rate(webwork_requests_total{{{SEL}, status=~"2..|3.."}}[$__range])) '
     f'/ sum(rate(webwork_requests_total{{{SEL}}}[$__range]))',
     6, y, w=3, unit="percentunit", dec=2,
-    desc="Share of calls answered with 2xx or 3xx over the selected range.",
+    desc="Share of the portal's calls answered with 2xx or 3xx over the selected range. "
+         "Portal only, not blended with the clock service: the Lambda publishes success and "
+         "failure counts for the whole punch (auth, DynamoDB and WebWork together), not an "
+         "outcome for the WebWork call alone, so there is no honest way to fold it into this "
+         "number without inventing one.",
     steps=[{"color": "red", "value": None}, {"color": "orange", "value": 0.95},
            {"color": "green", "value": 0.99}]))
 panels.append(stat(
     "Error rate",
     f'(sum(rate(webwork_errors_total{{{SEL}}}[$__range])) or vector(0)) '
     f'/ sum(rate(webwork_requests_total{{{SEL}}}[$__range]))',
-    9, y, w=3, unit="percentunit", dec=2,
+    9, y, w=2, unit="percentunit", dec=2,
     desc="or vector(0) so a clean period renders 0 rather than \"No data\", which would be "
          "indistinguishable from a broken scrape.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 0.01},
            {"color": "red", "value": 0.05}]))
 panels.append(stat(
-    "Requests / min", f'sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) * 60',
-    12, y, w=3, dec=1,
-    desc="WebWork's documented ceiling is 60/min per workspace."))
+    "Requests / min",
+    f'(sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) or vector(0)) * 60',
+    11, y, w=4, dec=1,
+    legend="Portal", expr2='(max(clock_webwork_calls) or vector(0)) / 5',
+    legend2="Clock (all)",
+    desc="Two independent readings side by side, not summed into one figure: Portal honours "
+         "job/endpoint/method/status like every other tile in this row; Clock (all) never "
+         "can, since clock_webwork_calls carries none of those labels, so it is always every "
+         "brand's clock traffic regardless of what this dashboard is filtered to. They used "
+         "to be added together under one title, which silently implied a filtered combined "
+         "total that, under any endpoint or status filter, was not what the number showed. "
+         "Add the two boxes yourself for a rough check against WebWork's documented 60/min "
+         "ceiling. Aggregated with max(), not sum(): the clock gauge mirrors one upstream "
+         "CloudWatch figure rather than partitioning work across processes, so a second cron "
+         "host publishing the same reading would double it under sum(). Both terms carry "
+         "`or vector(0)` so an idle side reads 0 rather than \"No data\": clock_webwork_calls "
+         "has no series until the poller's first successful set(), which is the state on day "
+         "one and in any window with no clock traffic, and the portal term goes empty "
+         "whenever $endpoint/$status is narrowed to a value with no traffic in the last 5m. "
+         "clock_webwork_calls is a gauge holding CloudWatch's SampleCount over the poller's "
+         "five-minute window, so dividing by 5 converts it to calls per minute. The gauge is "
+         "only overwritten when CloudWatch returns a datapoint, so a quiet or broken clock "
+         "path holds its last value indefinitely, and an idle clock service and a broken one "
+         "read identically here."))
 panels.append(stat(
     "Requests (range)",
     f'sum(increase(webwork_requests_total{{{SEL_STATUS}}}[$__range])) or vector(0)',
@@ -199,14 +284,35 @@ panels.append(stat(
          "not as a receipt. or vector(0) so a range with no calls renders 0 rather than "
          "\"No data\", which would be indistinguishable from a broken scrape."))
 panels.append(stat(
-    "Latency p95",
+    "Latency p95 / mean",
     f'histogram_quantile(0.95, sum by (le) (rate(webwork_request_duration_seconds_bucket{{{SEL}}}[5m])))',
-    18, y, w=3, unit="s", dec=2,
-    steps=[{"color": "green", "value": None}, {"color": "orange", "value": 2},
-           {"color": "red", "value": 5}]))
+    18, y, w=4, unit="s", dec=2,
+    legend="Portal p95", expr2='max(clock_webwork_call_duration_seconds)',
+    legend2="Clock mean",
+    desc="Portal p95 and the clock service's mean side by side, each labelled with its own "
+         "statistic, rather than blended into one number. CloudWatch publishes "
+         "clock_webwork_call_duration_seconds as an Average, not a percentile, so combining "
+         "it with the portal's p95 would produce a figure belonging to neither. Wrapped in "
+         "max(), not summed or averaged across series: this gauge already is the upstream "
+         "mean, one figure CloudWatch computed, and max() picks that single reading without "
+         "risking a second cron host's identical value distorting it, the same reasoning "
+         "build-performance-tracker-api.py applies to its own CloudWatch-bridged gauges. "
+         "Only the Portal p95 box carries the colour thresholds below (green under 2s, "
+         "orange to 5s, red above); the clock mean is a different statistic and is left "
+         "uncoloured so a healthy mean is never painted orange or red by thresholds tuned "
+         "for a percentile. The clock value has no job/endpoint/method/status selector "
+         "applied to it, by choice, not because it lacks those labels.",
+    steps=[{"color": "text", "value": None}],
+    overrides=[{
+        "matcher": {"id": "byName", "options": "Portal p95"},
+        "properties": [{"id": "thresholds", "value": {"mode": "absolute", "steps": [
+            {"color": "green", "value": None}, {"color": "orange", "value": 2},
+            {"color": "red", "value": 5},
+        ]}}],
+    }]))
 panels.append(stat(
-    "HTTP 429 (range)", f'sum(increase(webwork_rate_limited_total{{endpoint=~"$endpoint"}}[$__range])) or vector(0)',
-    21, y, w=3, dec=0,
+    "429s (range)", f'sum(increase(webwork_rate_limited_total{{endpoint=~"$endpoint"}}[$__range])) or vector(0)',
+    22, y, w=2, dec=0,
     desc="Rate-limited responses over the selected range.",
     steps=[{"color": "green", "value": None}, {"color": "red", "value": 1}]))
 panels.append(stat(
@@ -462,6 +568,34 @@ panels.append(ts(
     desc="How much WebWork traffic one reconcile run generates — the number to watch against "
          "the 60/min ceiling."))
 y += 8
+panels.append({
+    "type": "table", "title": "Clock service jobs: last run status", "id": nid(),
+    "description":
+        "clock-events-drain, clock-context-sync and clock-lambda-metrics-poller all run as "
+        "cron jobs too, but they publish cronjob_* metrics, not webwork_job_*, so every panel "
+        "above this one never sees them. The poller showing up here is a plus, not noise: a "
+        "separate fix makes a failed CloudWatch poll actually fail its cron run, so this "
+        "table is where that failure would become visible. Only the current status is set to "
+        "1 upstream, one series per status, so `== 1` turns that into a readable label "
+        "instead of a numeric code to remember. No job/endpoint/method/status selector is "
+        "applied to it here, by choice, not because the metric lacks those labels.",
+    "gridPos": {"h": 6, "w": 24, "x": 0, "y": y}, "datasource": PROM,
+    "targets": [{"datasource": PROM, "refId": "A", "editorMode": "code", "instant": True,
+                 "range": False, "format": "table",
+                 "expr": 'max by (job_name, status) '
+                         '(cronjob_last_run_status{job_name=~"clock-.*"} == 1)'}],
+    "transformations": [
+        {"id": "organize", "options": {
+            "excludeByName": {"Time": True, "Value": True},
+            "renameByName": {"job_name": "Job", "status": "Last status"},
+            "indexByName": {"job_name": 0, "status": 1},
+        }},
+    ],
+    "options": {"showHeader": True, "cellHeight": "sm", "footer": {"show": False}},
+    "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"},
+                                            "filterable": True}}, "overrides": []},
+})
+y += 6
 panels.append(logs(
     "Job logs", '{job=~"server|cron"} | json | module = `webwork` | job_execution_id != ``', 0, y, h=10,
     desc="Start, completion and failure lines for the reconcile job, with duration, record "

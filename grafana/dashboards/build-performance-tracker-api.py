@@ -25,11 +25,18 @@ def nid():
     return pid
 
 
-def targets(*specs):
+def targets(*specs, instant=False):
+    # instant=False (every existing caller) keeps the exact prior shape: range
+    # only, no "instant" key. instant=True is for a stat that reduces to one
+    # point anyway, so Grafana evaluates the query once instead of at every
+    # step across the dashboard's time range.
     out = []
     for i, (expr, legend) in enumerate(specs):
-        out.append({"datasource": DS, "expr": expr, "legendFormat": legend,
-                    "refId": chr(65 + i), "editorMode": "code", "range": True})
+        t = {"datasource": DS, "expr": expr, "legendFormat": legend,
+             "refId": chr(65 + i), "editorMode": "code", "range": not instant}
+        if instant:
+            t["instant"] = True
+        out.append(t)
     return out
 
 
@@ -38,13 +45,24 @@ def row(title, y):
             "id": nid(), "collapsed": False, "panels": []}
 
 
-def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, legend=""):
+def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, legend="",
+          instant=False):
+    # instant=True has no time series to sparkline (Grafana returns one point,
+    # not a range), so graphMode is "none" rather than the default "area": left
+    # at "area" it is a dead option, and on a wall display a missing sparkline
+    # reads as more honest than one that silently stopped moving. Chosen over
+    # reverting these panels to range queries, since avoiding the full-range
+    # scan was the point of instant in the first place, and for a
+    # should-read-zero health stat a sparkline of a mostly-flat zero told a
+    # reader little anyway. A genuinely continuous read (e.g. Events pending,
+    # which stays range) keeps its sparkline on purpose, not by oversight.
+    graph_mode = "none" if instant else "area"
     return {
         "type": "stat", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": DS,
-        "targets": targets((expr, legend)),
+        "targets": targets((expr, legend), instant=instant),
         "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-                    "colorMode": "value", "graphMode": "area", "textMode": "auto",
+                    "colorMode": "value", "graphMode": graph_mode, "textMode": "auto",
                     "justifyMode": "auto", "orientation": "auto"},
         "fieldConfig": {"defaults": {"unit": unit, "mappings": [],
                                      "thresholds": thresholds or {"mode": "absolute",
@@ -53,7 +71,22 @@ def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, le
     }
 
 
-def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, minv=None, fill=10):
+def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, minv=None, fill=10,
+       threshold=None, overrides=None, span_nulls=True):
+    # threshold draws a dashed reference line at that value, e.g. the 60s latency
+    # promise. overrides carries per-field fieldConfig overrides (see `override()`),
+    # for the rare panel that needs a series on its own axis or unit. span_nulls
+    # defaults True to match every existing panel; set False for a low-volume
+    # series where a quiet period must show as a gap, not a fabricated straight
+    # line that can sit on either side of a threshold.
+    custom = {"drawStyle": "line", "lineWidth": 1, "fillOpacity": fill,
+              "showPoints": "never", "spanNulls": span_nulls,
+              "scaleDistribution": {"type": "linear"}}
+    thresholds = {"mode": "absolute", "steps": [{"color": "green", "value": None}]}
+    if threshold is not None:
+        custom["thresholdsStyle"] = {"mode": "dashed"}
+        thresholds = {"mode": "absolute", "steps": [{"color": "green", "value": None},
+                                                     {"color": "red", "value": threshold}]}
     return {
         "type": "timeseries", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": DS,
@@ -65,13 +98,15 @@ def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, 
         "fieldConfig": {"defaults": {
             "unit": unit,
             "min": minv,
-            "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": fill,
-                       "showPoints": "never", "spanNulls": True,
-                       "scaleDistribution": {"type": "linear"}},
+            "custom": custom,
             "color": {"mode": "palette-classic"},
-            "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}]},
-        }, "overrides": []},
+            "thresholds": thresholds,
+        }, "overrides": overrides or []},
     }
+
+
+def override(matcher_id, options, props):
+    return {"matcher": {"id": matcher_id, "options": options}, "properties": props}
 
 
 def loki_targets(*exprs, instant=False):
@@ -396,6 +431,238 @@ panels.append(ts(
     [("sum by (status) (rate(learnupon_events_processed_total[5m]))", "{{status}}")],
     12, y, w=12, unit="reqps", minv=0,
     desc="Emitted by the cron job. status=failed climbing precedes dead letter growth."))
+
+# ── Clock service ────────────────────────────────────────────────
+#
+# On this board, not a separate one, because correlation is the point: portal
+# saturation and clock latency need to sit on one time axis, and a separate
+# board would recreate the problem this row solves.
+#
+# Five of these metrics (aws_lambda_*) are bridged from CloudWatch by a poller
+# that writes once every five minutes; each is a gauge already holding
+# CloudWatch's own Sum or Average for that trailing window, not a counter that
+# climbs forever. rate() and increase() assume a monotonic counter, which is
+# false here. sum_over_time() is also wrong, and not for the same reason it is
+# wrong on a real counter: this Prometheus scrapes every 15s while the poller
+# only writes every 300s, so sum_over_time repeats and adds each five-minute
+# value roughly 20 times over a range, turning 3 real errors into 60. The two
+# range-total panels below use max_over_time() instead, which reads the same
+# repeated samples but takes their peak, answering "did this happen" correctly
+# regardless of scrape rate; the two plain timeseries panels below plot the
+# gauge directly with no range function at all, since a graph over time needs
+# no reduction to a single number. Every one of these gauges holds its last
+# value if the poller stops, so a flat reading can mean a quiet Lambda or a
+# stalled poller, and no panel here can tell those apart alone; each panel's
+# own description says so, since a reader looking at one panel does not see
+# this comment.
+#
+# No template variables are applied to this section: this dashboard's
+# templating list is empty, and the only label the CloudWatch-bridged metrics
+# carry is environment, which none of this board's variables bind to anyway.
+#
+# Three panels here aggregate with max() where the rest of this file (and the
+# counters right next to them, dropped/quarantined) use sum(): clock_events_
+# pending, aws_lambda_errors and aws_lambda_throttles each mirror one upstream
+# number (a single DynamoDB count, CloudWatch's own per-function figures)
+# rather than partitioning work across instances, so summing what a second
+# process publishing the same reading would double-count is wrong, the same
+# reasoning DEDUP documents above for the LearnUpon queue gauges. This also
+# is not optional once `or vector(0)` is involved: `or` matches on the full
+# label set, vector(0) has none, and a real series here still carries job and
+# instance, which are never equal to that empty set, so a bare `metric or
+# vector(0)` unions a permanent phantom zero in on every healthy render
+# instead of ever replacing anything. max()/sum() strip labels to `{}` first,
+# which is what lets the fallback actually take over when the series is
+# absent.
+y += 8
+panels.append(row("Clock service", y))
+y += 1
+
+# Step 1: immediate health. Four stats that should read zero.
+panels.append(stat(
+    "Events pending", "max(clock_events_pending) or vector(0)", 0, y, w=6,
+    desc="Events queued by the clock service waiting to drain into time_tracker. Published "
+         "directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, "
+         "so this reflects the current depth rather than a five-minute-old sample. Wrapped "
+         "in max(), not sum(): this gauge mirrors one upstream DynamoDB count rather than "
+         "partitioning work, so a second process reporting the same reading must not be "
+         "added to itself, and only a labelless aggregate lets the `or vector(0)` fallback "
+         "actually replace a missing series instead of being unioned in beside it as a "
+         "second, permanently-zero tile (a real series here still carries job/instance, "
+         "which never equals vector(0)'s empty label set). Red above 50 to match the "
+         "Task 7 alert rule; normal operation reads at or near zero.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 50}]},
+    legend="pending"))
+panels.append(stat(
+    "Events dropped",
+    "clamp_min((sum(clock_events_dropped_total) or vector(0)) - "
+    "(sum(clock_events_dropped_total offset $__range) or vector(0)), 0)",
+    6, y, w=6, instant=True,
+    desc="Events the clock service discarded rather than delivered, over the selected range. "
+         "summed across every reason into one total rather than increase(): "
+         "clock_events_dropped_total is a labelled counter, so a reason's first-ever drop "
+         "creates that child mid-window, every sample of it then holds the same value, and "
+         "increase() reports 0 for that case (Prometheus's zero-extrapolation only fires when "
+         "the raw delta is already positive), rendering green at the exact moment it should "
+         "fire red. This range-offset difference does not have that blind spot, but it also "
+         "does not detect a genuine counter reset the way increase() does: a cron restart "
+         "inside the window can make this figure undercount. Both terms carry `or vector(0)` "
+         "so a metric with no data yet subtracts as zero instead of producing No data, and "
+         "clamp_min floors the result at 0 since this form has no reset handling of its own. "
+         "Should read zero; Task 7's alert on this same metric is the authority, not this "
+         "panel.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="dropped"))
+panels.append(stat(
+    "Events quarantined",
+    "clamp_min((sum(clock_events_quarantined_total) or vector(0)) - "
+    "(sum(clock_events_quarantined_total offset $__range) or vector(0)), 0)",
+    12, y, w=6, instant=True,
+    desc="Events set aside for manual review rather than dropped or drained, over the "
+         "selected range. Same range-offset difference as Events dropped and for the same "
+         "reason: increase() reports 0 for the very first occurrence inside the window, "
+         "because a newly created counter child holds a constant value across every sample "
+         "until the next one. clamp_min floors the result at 0, since this form, unlike "
+         "increase(), does not detect a genuine counter reset; a cron restart inside the "
+         "window can still make this figure undercount. Should read zero; Task 7's alert on "
+         "this same metric is the authority for catching the very first occurrence "
+         "reliably, not this panel.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="quarantined"))
+panels.append(stat(
+    "Lambda errors (worst 5-minute window)",
+    "max(max_over_time(aws_lambda_errors[$__range])) or vector(0)", 18, y, w=6, instant=True,
+    desc="The single worst five-minute window's Lambda invocation errors inside the selected "
+         "range, not a running total. aws_lambda_errors is a gauge that a CloudWatch poller "
+         "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
+         "far more often (every 15s), so summing the raw samples with sum_over_time would "
+         "count each five-minute value roughly 20 times over, turning 3 real errors into 60. "
+         "max_over_time takes the peak of those repeated samples instead, which answers "
+         "\"did this happen\" correctly regardless of scrape rate or a gap in polling. The "
+         "outer max() is for the same reason as Events pending above: this is CloudWatch's "
+         "own single number for the function, not a per-instance count, so max() rather than "
+         "sum() avoids double-counting and is also what lets `or vector(0)` replace a "
+         "missing series instead of adding a permanent phantom zero beside it. The value "
+         "refreshes every five minutes and holds its last reading if the poller stops, so a "
+         "flat zero can also mean a dead poller rather than a healthy Lambda. Should read "
+         "zero.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="errors"))
+y += 4
+
+# Step 2: the latency the design promises.
+panels.append(ts(
+    "Punch-to-time_tracker latency (p50 / p95)",
+    [("histogram_quantile(0.50, sum by (le) (rate(clock_event_latency_seconds_bucket"
+      "[$__rate_interval])))", "p50"),
+     ("histogram_quantile(0.95, sum by (le) (rate(clock_event_latency_seconds_bucket"
+      "[$__rate_interval])))", "p95")],
+    0, y, w=24, unit="s", minv=0, threshold=60, span_nulls=False,
+    desc="The design promises a punch reaches time_tracker within a minute; this is that "
+         "promise, watched continuously rather than audited by hand. The dashed line at 60 "
+         "seconds is that one-minute promise made visible on the graph: p95 crossing it means "
+         "the promise is being broken for at least 1 in 20 punches, not merely that something "
+         "is slower than usual. Gaps are left open rather than interpolated across: punch "
+         "volume is low enough that a quiet stretch makes every bucket's rate 0 and "
+         "histogram_quantile returns no series at all, and spanning that gap would draw a "
+         "straight fabricated line that could sit on either side of the 60s promise this "
+         "panel exists to judge."))
+y += 8
+
+# Step 3: the migration view.
+panels.append(ts(
+    "Migration progress: clock service vs portal punches",
+    [("sum by (company_slug) (rate(clock_events_drained_total[$__rate_interval]))", "Clock: {{company_slug}}"),
+     ("(sum(rate(webwork_requests_total{endpoint=~\"/time-tracking/(start|stop)\"}"
+      "[$__rate_interval])) or vector(0))", "Portal punches")],
+    0, y, w=24, unit="reqps", minv=0,
+    desc="Punches drained through the clock service, by brand, next to the portal's own "
+         "/time-tracking/start and /stop calls on the same axis: this is the curve that says "
+         "when Reach can be enabled and when the portal's own start and stop endpoints can be "
+         "deleted. Legends are prefixed (\"Clock: teem\") because an unlabelled brand name "
+         "next to \"Portal punches\" reads as the portal's own traffic for that brand, which "
+         "inverts the whole point of a migration panel. webwork_requests_total is published "
+         "by the portal only; the Lambda's WebWork calls never pass through it, so these two "
+         "lines are disjoint populations, not a double count of the same punches. Portal "
+         "punches is wrapped in `or vector(0)`: once those endpoints stop being called and "
+         "the API process next restarts, prom-client will not recreate the series, and "
+         "without this fallback the line would vanish from the graph entirely instead of "
+         "reading as zero. As the migration completes, Portal punches is expected to fall to "
+         "(and stay at) zero while the by-brand clock lines carry everything; a Portal "
+         "punches line flatlined at zero later is the success condition this panel was built "
+         "to show, not a sign the panel is broken."))
+y += 8
+
+# Step 4: Lambda infrastructure.
+panels.append(ts(
+    "Lambda invocations, concurrency and duration",
+    [("aws_lambda_invocations", "{{environment}} invocations"),
+     ("aws_lambda_concurrent_executions", "{{environment}} concurrent executions"),
+     ("aws_lambda_duration_seconds", "{{environment}} duration (s)")],
+    0, y, w=18, unit="short", minv=0,
+    overrides=[override("byRegexp", ".*duration.*",
+                         [{"id": "unit", "value": "s"},
+                          {"id": "custom.axisPlacement", "value": "right"}])],
+    desc="Invocations and concurrent executions (left axis, both counts) and duration (right "
+         "axis, seconds) for the clock Lambda, sharing one panel because a count and a "
+         "duration cannot share a meaningful scale on their own axis. Concurrent executions "
+         "sits beside invocations rather than off on its own: it is the number that predicts "
+         "a throttle, since concurrency climbing toward the account's reserved-concurrency "
+         "ceiling is what causes the throttles stat beside this panel to move, so a reader "
+         "chasing a throttle spike wants this line on the same read, not a separate panel. "
+         "All three series are gauges bridged from CloudWatch, each overwritten every five "
+         "minutes by the poller and each already holding CloudWatch's own aggregate for that "
+         "window rather than a raw sample (invocations Sum, duration Average; concurrent "
+         "executions is a live count rather than something summed or averaged over the "
+         "window), so all three are plotted directly with no rate() or increase() because a "
+         "gauge is not a counter. Each holds its last reading if the poller stops, so a flat "
+         "line here is consistent with either quiet traffic or a stalled poller; this panel "
+         "alone cannot tell the two apart. Metered on every poll regardless of whether "
+         "anything changed, at roughly nine cents a month of the poller's total cost; this "
+         "panel is the only reader of it, so that cost now buys something."))
+panels.append(stat(
+    "Lambda throttles (worst 5-minute window)",
+    "max(max_over_time(aws_lambda_throttles[$__range])) or vector(0)", 18, y, w=6, h=8, instant=True,
+    desc="The single worst five-minute window's Lambda throttles inside the selected range, "
+         "not a running total. aws_lambda_throttles is a gauge that a CloudWatch poller "
+         "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
+         "far more often (every 15s), so summing the raw samples with sum_over_time would "
+         "count each five-minute value roughly 20 times over. max_over_time takes the peak of "
+         "those repeated samples instead, which answers \"did this happen\" correctly "
+         "regardless of scrape rate or a gap in polling. The outer max(), same as the other "
+         "two CloudWatch-bridged stats in this row, is because this is CloudWatch's own "
+         "single number rather than a per-instance count: max() avoids double-counting if a "
+         "second poller ever existed, and it is also what lets `or vector(0)` replace a "
+         "missing series instead of adding a permanent phantom zero beside it. The value "
+         "refreshes every five minutes and holds its last reading if the poller stops, so a "
+         "flat zero can also mean a dead poller rather than a healthy Lambda. Any value "
+         "above zero means the Lambda hit its concurrency ceiling and a punch was delayed or "
+         "rejected.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="throttles"))
+y += 8
+
+# Step 5: context sync. Half this service and, until now, on no panel at
+# all: the only place it showed up was a status cell on the WebWork board.
+panels.append(ts(
+    "Context sync: items and writes",
+    [("clock_context_items", "{{company_slug}} items"),
+     ("rate(clock_context_items_written_total[$__rate_interval])", "written/s")],
+    0, y, w=12, unit="short", minv=0,
+    overrides=[override("byName", "written/s",
+                         [{"id": "unit", "value": "wps"},
+                          {"id": "custom.axisPlacement", "value": "right"}])],
+    desc="Whether the context sync is fresh and actually writing. clock_context_items (left "
+         "axis) is the live item count per brand, held by the clock-context-sync cron job. "
+         "clock_context_items_written_total (right axis, writes/second) is how many of them "
+         "changed and got written in this window. written/s reading zero is the normal "
+         "steady state, not a failure: the sync only writes what changed since its last run, "
+         "so a quiet period with nothing new produces zero writes by design, not an outage."))
 
 # ── Logs ─────────────────────────────────────────────────────────
 y += 8
