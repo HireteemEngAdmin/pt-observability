@@ -2060,7 +2060,7 @@
     {
       "type": "stat",
       "title": "Events pending",
-      "description": "Events queued by the clock service waiting to drain into time_tracker. Published directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, so this reflects the current depth rather than a five-minute-old sample. Red above 50 to match the Task 7 alert rule; normal operation reads at or near zero.",
+      "description": "Events queued by the clock service waiting to drain into time_tracker. Published directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, so this reflects the current depth rather than a five-minute-old sample. `or vector(0)` so a gap in scraping this target reads as an explicit 0 rather than a grey No data box that looks the same as the healthy state at a glance. Red above 50 to match the Task 7 alert rule; normal operation reads at or near zero.",
       "id": 35,
       "gridPos": {
         "h": 4,
@@ -2078,7 +2078,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "clock_events_pending",
+          "expr": "clock_events_pending or vector(0)",
           "legendFormat": "pending",
           "refId": "A",
           "editorMode": "code",
@@ -2123,7 +2123,7 @@
     {
       "type": "stat",
       "title": "Events dropped",
-      "description": "Events the clock service discarded rather than delivered, over the selected range. Carries a reason label upstream, so more than one reason firing in the window shows as more than one number in this panel rather than one blended total. Should read zero; any value above it is a punch that never reached time_tracker.",
+      "description": "Events the clock service discarded rather than delivered, over the selected range. summed across every reason into one total rather than increase(): clock_events_dropped_total is a labelled counter, so a reason's first-ever drop creates that child mid-window, every sample of it then holds the same value, and increase() reports 0 for that case (Prometheus's zero-extrapolation only fires when the raw delta is already positive), rendering green at the exact moment it should fire red. This range-offset difference does not have that blind spot, but it also does not detect a genuine counter reset the way increase() does: a cron restart inside the window can make this figure undercount. Both terms carry `or vector(0)` so a metric with no data yet subtracts as zero instead of producing No data, and clamp_min floors the result at 0 since this form has no reset handling of its own. Should read zero; Task 7's alert on this same metric is the authority, not this panel.",
       "id": 36,
       "gridPos": {
         "h": 4,
@@ -2141,7 +2141,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(clock_events_dropped_total[$__range])",
+          "expr": "clamp_min((sum(clock_events_dropped_total) or vector(0)) - (sum(clock_events_dropped_total offset $__range) or vector(0)), 0)",
           "legendFormat": "dropped",
           "refId": "A",
           "editorMode": "code",
@@ -2186,7 +2186,7 @@
     {
       "type": "stat",
       "title": "Events quarantined",
-      "description": "Events set aside for manual review rather than dropped or drained, over the selected range. Should read zero; any value above it means an event needs a human before it can be processed.",
+      "description": "Events set aside for manual review rather than dropped or drained, over the selected range. Same range-offset difference as Events dropped and for the same reason: increase() reports 0 for the very first occurrence inside the window, because a newly created counter child holds a constant value across every sample until the next one. clamp_min floors the result at 0, since this form, unlike increase(), does not detect a genuine counter reset; a cron restart inside the window can still make this figure undercount. Should read zero; Task 7's alert on this same metric is the authority for catching the very first occurrence reliably, not this panel.",
       "id": 37,
       "gridPos": {
         "h": 4,
@@ -2204,7 +2204,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "increase(clock_events_quarantined_total[$__range])",
+          "expr": "clamp_min((sum(clock_events_quarantined_total) or vector(0)) - (sum(clock_events_quarantined_total offset $__range) or vector(0)), 0)",
           "legendFormat": "quarantined",
           "refId": "A",
           "editorMode": "code",
@@ -2248,8 +2248,8 @@
     },
     {
       "type": "stat",
-      "title": "Lambda errors",
-      "description": "Lambda invocation errors, totalled over the selected range. aws_lambda_errors is a CloudWatch-bridged gauge (see the section note above): sum_over_time adds up the completed five-minute Sums it already holds across the range, which is the form that matches what this series actually contains; increase() or rate() would silently misread it, because the value is not a monotonic counter. Should read zero.",
+      "title": "Lambda errors (worst 5-minute window)",
+      "description": "The single worst five-minute window's Lambda invocation errors inside the selected range, not a running total. aws_lambda_errors is a gauge that a CloudWatch poller overwrites every five minutes with that window's own Sum; Prometheus itself scrapes far more often (every 15s), so summing the raw samples with sum_over_time would count each five-minute value roughly 20 times over, turning 3 real errors into 60. max_over_time takes the peak of those repeated samples instead, which answers \"did this happen\" correctly regardless of scrape rate or a gap in polling. The value refreshes every five minutes and holds its last reading if the poller stops, so a flat zero can also mean a dead poller rather than a healthy Lambda; `or vector(0)` only covers the case where the series has no data point at all. Should read zero.",
       "id": 38,
       "gridPos": {
         "h": 4,
@@ -2267,7 +2267,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum_over_time(aws_lambda_errors[$__range])",
+          "expr": "max_over_time(aws_lambda_errors[$__range]) or vector(0)",
           "legendFormat": "errors",
           "refId": "A",
           "editorMode": "code",
@@ -2312,7 +2312,7 @@
     {
       "type": "timeseries",
       "title": "Punch-to-time_tracker latency (p50 / p95)",
-      "description": "The design promises a punch reaches time_tracker within a minute; this is that promise, watched continuously rather than audited by hand. The dashed line at 60 seconds is that one-minute promise made visible on the graph: p95 crossing it means the promise is being broken for at least 1 in 20 punches, not merely that something is slower than usual.",
+      "description": "The design promises a punch reaches time_tracker within a minute; this is that promise, watched continuously rather than audited by hand. The dashed line at 60 seconds is that one-minute promise made visible on the graph: p95 crossing it means the promise is being broken for at least 1 in 20 punches, not merely that something is slower than usual. Gaps are left open rather than interpolated across: punch volume is low enough that a quiet stretch makes every bucket's rate 0 and histogram_quantile returns no series at all, and spanning that gap would draw a straight fabricated line that could sit on either side of the 60s promise this panel exists to judge.",
       "id": 39,
       "gridPos": {
         "h": 8,
@@ -2369,7 +2369,7 @@
             "lineWidth": 1,
             "fillOpacity": 10,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -2400,7 +2400,7 @@
     {
       "type": "timeseries",
       "title": "Migration progress: clock service vs portal punches",
-      "description": "Punches drained through the clock service, by brand, next to the portal's own /time-tracking/start and /stop calls on the same axis: this is the curve that says when Reach can be enabled and when the portal's own start and stop endpoints can be deleted. webwork_requests_total is published by the portal only; the Lambda's WebWork calls never pass through it, so these two lines are disjoint populations, not a double count of the same punches. As the migration completes, Portal punches is expected to fall to zero while the by-brand clock lines carry everything; a Portal punches line flatlined at zero later is the success condition this panel was built to show, not a sign the panel is broken.",
+      "description": "Punches drained through the clock service, by brand, next to the portal's own /time-tracking/start and /stop calls on the same axis: this is the curve that says when Reach can be enabled and when the portal's own start and stop endpoints can be deleted. Legends are prefixed (\"Clock: teem\") because an unlabelled brand name next to \"Portal punches\" reads as the portal's own traffic for that brand, which inverts the whole point of a migration panel. webwork_requests_total is published by the portal only; the Lambda's WebWork calls never pass through it, so these two lines are disjoint populations, not a double count of the same punches. Portal punches is wrapped in `or vector(0)`: once those endpoints stop being called and the API process next restarts, prom-client will not recreate the series, and without this fallback the line would vanish from the graph entirely instead of reading as zero. As the migration completes, Portal punches is expected to fall to (and stay at) zero while the by-brand clock lines carry everything; a Portal punches line flatlined at zero later is the success condition this panel was built to show, not a sign the panel is broken.",
       "id": 40,
       "gridPos": {
         "h": 8,
@@ -2419,7 +2419,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (company_slug) (rate(clock_events_drained_total[$__rate_interval]))",
-          "legendFormat": "{{company_slug}}",
+          "legendFormat": "Clock: {{company_slug}}",
           "refId": "A",
           "editorMode": "code",
           "range": true
@@ -2429,7 +2429,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(webwork_requests_total{endpoint=~\"/time-tracking/(start|stop)\"}[$__rate_interval]))",
+          "expr": "(sum(rate(webwork_requests_total{endpoint=~\"/time-tracking/(start|stop)\"}[$__rate_interval])) or vector(0))",
           "legendFormat": "Portal punches",
           "refId": "B",
           "editorMode": "code",
@@ -2481,7 +2481,7 @@
     {
       "type": "timeseries",
       "title": "Lambda invocations and duration",
-      "description": "Invocations (left axis, a count) and duration (right axis, seconds) for the clock Lambda, sharing one panel because a count and a duration cannot share a meaningful scale on their own axis. Both series are CloudWatch-bridged gauges (see the section note above): invocations already holds CloudWatch's Sum of calls for the trailing five-minute window, duration already holds its Average, and both are plotted directly rather than through rate() or increase() because a gauge is not a counter. A flat line here is consistent with either quiet traffic or a stalled poller; this panel alone cannot tell the two apart.",
+      "description": "Invocations (left axis, a count) and duration (right axis, seconds) for the clock Lambda, sharing one panel because a count and a duration cannot share a meaningful scale on their own axis. Both series are gauges bridged from CloudWatch: invocations already holds CloudWatch's Sum of calls for the trailing five-minute window, duration already holds its Average, both overwritten every five minutes by the poller, and both plotted directly with no rate() or increase() because a gauge is not a counter. Each holds its last reading if the poller stops, so a flat line here is consistent with either quiet traffic or a stalled poller; this panel alone cannot tell the two apart.",
       "id": 41,
       "gridPos": {
         "h": 8,
@@ -2578,8 +2578,8 @@
     },
     {
       "type": "stat",
-      "title": "Lambda throttles (range)",
-      "description": "Lambda invocations throttled by concurrency limits, totalled over the selected range. Same gauge shape as the health stats above: aws_lambda_throttles holds CloudWatch's own five-minute Sum, so sum_over_time adds up the completed window sums instead of increase() or rate() misreading a series that is not a monotonic counter. Any value above zero means the Lambda hit its concurrency ceiling and a punch was delayed or rejected.",
+      "title": "Lambda throttles (worst 5-minute window)",
+      "description": "The single worst five-minute window's Lambda throttles inside the selected range, not a running total. aws_lambda_throttles is a gauge that a CloudWatch poller overwrites every five minutes with that window's own Sum; Prometheus itself scrapes far more often (every 15s), so summing the raw samples with sum_over_time would count each five-minute value roughly 20 times over. max_over_time takes the peak of those repeated samples instead, which answers \"did this happen\" correctly regardless of scrape rate or a gap in polling. The value refreshes every five minutes and holds its last reading if the poller stops, so a flat zero can also mean a dead poller rather than a healthy Lambda. Any value above zero means the Lambda hit its concurrency ceiling and a punch was delayed or rejected.",
       "id": 42,
       "gridPos": {
         "h": 8,
@@ -2597,7 +2597,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum_over_time(aws_lambda_throttles[$__range])",
+          "expr": "max_over_time(aws_lambda_throttles[$__range]) or vector(0)",
           "legendFormat": "throttles",
           "refId": "A",
           "editorMode": "code",
@@ -2628,6 +2628,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
