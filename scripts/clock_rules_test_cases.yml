@@ -217,3 +217,26 @@ tests:
       - eval_time: 10m
         alertname: ClockJobFailing
         exp_alerts: []
+
+  # A handled 500 reaches the gateway metric and nothing else. Fires on any non-zero.
+  - interval: 1m
+    input_series:
+      - series: 'aws_apigateway_5xx{environment="production"}'
+        values: "0 0 0 0 24 24 24 24 24 24"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ClockApiServerErrors
+        exp_alerts:
+          - exp_labels: {}
+
+  # A quiet window publishes a real zero, not an absent series, and must stay silent.
+  # Without this the rule could be pinned to fire on anything and the case above would
+  # still pass.
+  - interval: 1m
+    input_series:
+      - series: 'aws_apigateway_5xx{environment="production"}'
+        values: "0+0x9"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ClockApiServerErrors
+        exp_alerts: []

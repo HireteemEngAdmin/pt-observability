@@ -499,3 +499,51 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: gt, params: [0] }
+
+      # The failure mode no other rule here can see. On 2026-09-01 the clock API
+      # returned 24 5xx in one hour while aws_lambda_errors read 0 for the same window,
+      # and both were right: index.js catches every exception and returns json(500, ...),
+      # which AWS counts as a successful invocation. The Errors metric only sees
+      # unhandled exceptions and timeouts, so the panel labelled "should read zero" read
+      # zero while 24 people got a 500. The gateway's own 5xx is the only signal that
+      # sees a handled one.
+      #
+      # Sum rather than a rate: this is a gauge the CloudWatch poller rewrites every five
+      # minutes holding the gateway's own Sum for its window, so rate() and increase() are
+      # both wrong on it, and max_over_time answers the question the panel next to it asks.
+      # A quiet window publishes 0, not nothing, so an absent series means the poller is
+      # down or CLOCK_API_GATEWAY_ID is wrong, and ClockJobFailing covers the first.
+      - uid: clock-api-5xx
+        title: ClockApiServerErrors
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: { severity: p1, service: clock }
+        annotations:
+          summary: the clock API returned server errors in the last five minutes
+          description: >-
+            Members are getting a 500 from clock-in, clock-out or status. This does not
+            show up in aws_lambda_errors, which reads 0 for a handled 500, so this rule
+            is the only alert that sees it. The Lambda logs the upstream cause at warn
+            level before returning; read them in CloudWatch Logs for /aws/lambda/
+            pt-clock-prod. The 2026-09-01 occurrence was 24 errors inside a single hour
+            with nothing either side, which is the shape of one upstream cause rather
+            than a chronic rate.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: max(aws_apigateway_5xx)
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
