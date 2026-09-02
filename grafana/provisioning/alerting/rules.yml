@@ -1,4 +1,4 @@
-# Alert rules for the CI poller and the deploys it runs.
+# Alert rules for the CI poller, the deploys it runs, and the clock service.
 #
 # These are the first alert rules this stack has ever had. Until now prometheus.yml
 # carried no `rule_files` and no `alerting` block, and there is no Alertmanager, so
@@ -241,3 +241,127 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: gt, params: [1] }
+
+  - orgId: 1
+    name: clock
+    folder: Performance Tracker
+    interval: 1m
+    rules:
+      # The drain writes queued punches to Postgres in batches; a backlog means it is
+      # falling behind, not that a punch is lost yet. Ten minutes rides out a normal
+      # burst (shift start/end) without riding out a drain that has actually stalled.
+      - uid: clock-events-backlog
+        title: ClockEventsBacklog
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels: { severity: p2, service: clock }
+        annotations:
+          summary: The clock event queue has been above 50 for 10 minutes
+          description: >-
+            Punches are queued faster than the drain writes them to Postgres. Check the
+            cron process's logs for the clock-events-drain job before assuming it is
+            only load: this is a gauge, so a drain that dies outright leaves it frozen
+            at whatever it last reported, and a reading under 50 does not by itself
+            prove the drain is healthy.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: clock_events_pending
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [50] }
+
+      # Not increase(): prom-client creates no child series until the first .inc(), so
+      # when a quarantine is the first one since the last restart, every sample in the
+      # 10m window holds the same value and the raw delta is 0. increase() would then
+      # miss the very event this rule exists to catch, on every cron restart, because
+      # quarantines are rare enough that most are a first. The diff below catches a
+      # series that did not exist 10m ago (sum() over no series is empty, and
+      # `or vector(0)` supplies the zero), clears on its own once the count has been
+      # flat across the whole window, and goes negative rather than positive on a
+      # counter reset, so a deploy cannot cause a false page.
+      - uid: clock-events-quarantined
+        title: ClockEventsQuarantined
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        # A quarantine needs a human now, not after riding out a dip that will not
+        # recur on its own.
+        for: 0m
+        labels: { severity: p1, service: clock }
+        annotations:
+          summary: A clock event was quarantined after exhausting its retries
+          description: >-
+            This event will not reach time_tracker without a human. It has already
+            left the pending queue, so query the events table (CLOCK_EVENTS_TABLE,
+            normally pt-clock-prod-events) for the item with quarantined_at set, read
+            last_error, and replay or hand-fix it in Postgres before its ttl expires
+            the record.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 1500, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: >-
+                sum(clock_events_quarantined_total) - (sum(clock_events_quarantined_total
+                offset 10m) or vector(0))
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # 60 is one of the histogram's own bucket boundaries, not an interpolated guess,
+      # so this fires exactly when more than 5% of punches cross a full minute.
+      - uid: clock-drain-latency-high
+        title: ClockDrainLatencyHigh
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        labels: { severity: p2, service: clock }
+        annotations:
+          summary: p95 punch-to-time_tracker latency has been above 60s for 10 minutes
+          description: >-
+            More than 5% of punches are taking over a minute to land in time_tracker.
+            Check ClockEventsBacklog and Postgres load first: latency rises when the
+            drain falls behind, not usually because a single write is slow. A window
+            with no punches evaluates to NaN here, which does not satisfy this
+            threshold, so this stays silent rather than paging on empty data.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: >-
+                histogram_quantile(0.95, sum by (le)
+                (rate(clock_event_latency_seconds_bucket[10m])))
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [60] }
