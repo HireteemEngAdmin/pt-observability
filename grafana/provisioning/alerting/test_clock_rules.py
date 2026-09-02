@@ -22,7 +22,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:
+    sys.exit(
+        "This script needs PyYAML, which the rest of this repo does not use.\n"
+        "  pip install pyyaml"
+    )
 
 PROM_IMAGE = "prom/prometheus:v3.2.0"  # keep in sync with docker-compose.yml's prometheus service
 GROUP_NAME = "clock"
@@ -59,6 +65,9 @@ def extract_clock_rules():
 
 
 def main():
+    if shutil.which("docker") is None:
+        sys.exit(f"This script runs promtool inside {PROM_IMAGE}, so it needs Docker on PATH.")
+
     rules = extract_clock_rules()
 
     print(f"Extracted from {RULES_FILE}:")
