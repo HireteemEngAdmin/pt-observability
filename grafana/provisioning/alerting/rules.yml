@@ -247,9 +247,62 @@ groups:
     folder: Performance Tracker
     interval: 1m
     rules:
+      # The one that justifies the rest. ClockEventsBacklog, ClockEventsQuarantined and
+      # ClockDrainLatencyHigh all read values the drain itself publishes, so all three
+      # go quiet, not red, exactly when the drain stops: a frozen gauge does not cross
+      # 50, a dead counter does not increment, and a stale histogram stops feeding new
+      # buckets. This is the only one of the four watching whether the drain is still
+      # alive at all, via the same heartbeat cronjob_last_success_timestamp_seconds
+      # every other cron job in this stack already relies on.
+      - uid: clock-drain-stalled
+        title: ClockDrainStalled
+        condition: THRESHOLD
+        # Alerting, not OK: a scrape that returns nothing means the drain is gone or
+        # wedged, which is exactly the condition this exists to catch. Every other
+        # clock rule here treats missing data as "has not happened yet"; this one
+        # cannot, for the same reason CIPollerStalled cannot.
+        noDataState: Alerting
+        execErrState: Error
+        # The drain cycles every 60s and restarts on its own deploys. Two minutes past
+        # a five minute threshold rides out a restart without riding out a real stall.
+        for: 2m
+        labels: { severity: p1, service: clock }
+        annotations:
+          summary: The clock events drain has not completed a cycle in over 5 minutes
+          description: >-
+            Punches have stopped reaching time_tracker entirely, and nothing else in
+            this file reports it: ClockEventsBacklog and ClockEventsQuarantined can
+            both stay silent while the drain is down, since a frozen gauge does not
+            grow and a dead counter does not increment. Check the cron process's logs
+            for the clock-events-drain job and restart it if the process itself is
+            gone.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: time() - cronjob_last_success_timestamp_seconds{job_name="clock-events-drain"}
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [300] }
+
       # The drain writes queued punches to Postgres in batches; a backlog means it is
       # falling behind, not that a punch is lost yet. Ten minutes rides out a normal
       # burst (shift start/end) without riding out a drain that has actually stalled.
+      #
+      # noDataState stays OK, not Alerting, even though a vanished drain is exactly
+      # what would cause this series to disappear: ClockDrainStalled above is the rule
+      # built for that (it watches the same job's own heartbeat, set at the same
+      # instant as this gauge), so promoting this one too would just page twice for
+      # one root cause without adding coverage.
       - uid: clock-events-backlog
         title: ClockEventsBacklog
         condition: THRESHOLD
@@ -264,7 +317,8 @@ groups:
             cron process's logs for the clock-events-drain job before assuming it is
             only load: this is a gauge, so a drain that dies outright leaves it frozen
             at whatever it last reported, and a reading under 50 does not by itself
-            prove the drain is healthy.
+            prove the drain is healthy. If the drain is gone entirely, ClockDrainStalled
+            is the rule that catches it.
         data:
           - refId: A
             datasourceUid: prometheus
