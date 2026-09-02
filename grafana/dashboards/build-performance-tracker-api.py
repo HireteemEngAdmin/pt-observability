@@ -47,12 +47,22 @@ def row(title, y):
 
 def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, legend="",
           instant=False):
+    # instant=True has no time series to sparkline (Grafana returns one point,
+    # not a range), so graphMode is "none" rather than the default "area": left
+    # at "area" it is a dead option, and on a wall display a missing sparkline
+    # reads as more honest than one that silently stopped moving. Chosen over
+    # reverting these panels to range queries, since avoiding the full-range
+    # scan was the point of instant in the first place, and for a
+    # should-read-zero health stat a sparkline of a mostly-flat zero told a
+    # reader little anyway. A genuinely continuous read (e.g. Events pending,
+    # which stays range) keeps its sparkline on purpose, not by oversight.
+    graph_mode = "none" if instant else "area"
     return {
         "type": "stat", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": DS,
         "targets": targets((expr, legend), instant=instant),
         "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-                    "colorMode": "value", "graphMode": "area", "textMode": "auto",
+                    "colorMode": "value", "graphMode": graph_mode, "textMode": "auto",
                     "justifyMode": "auto", "orientation": "auto"},
         "fieldConfig": {"defaults": {"unit": unit, "mappings": [],
                                      "thresholds": thresholds or {"mode": "absolute",
