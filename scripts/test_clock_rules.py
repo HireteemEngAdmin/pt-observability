@@ -10,7 +10,7 @@ builds a native Prometheus rule file from them, and runs that through
 `promtool test rules` against the scenarios in clock_rules_test_cases.yml.
 
 Usage:
-    python3 grafana/provisioning/alerting/test_clock_rules.py
+    python3 scripts/test_clock_rules.py
 
 Requires: PyYAML (`pip install pyyaml`) and Docker. Pins the same Prometheus
 image/version this repo's docker-compose.yml runs, so a passing result here
@@ -33,7 +33,12 @@ except ModuleNotFoundError:
 PROM_IMAGE = "prom/prometheus:v3.2.0"  # keep in sync with docker-compose.yml's prometheus service
 GROUP_NAME = "clock"
 HERE = Path(__file__).resolve().parent
-RULES_FILE = HERE / "rules.yml"
+# Lives in scripts/, not grafana/provisioning/alerting/: that directory is bind-
+# mounted read-only into Grafana by docker-compose.yml, and a local `docker
+# compose up` chokes if the alerting provisioner finds files here it cannot
+# parse as alert rules.
+REPO_ROOT = HERE.parent
+RULES_FILE = REPO_ROOT / "grafana" / "provisioning" / "alerting" / "rules.yml"
 TEST_CASES_FILE = HERE / "clock_rules_test_cases.yml"
 GENERATED_NAME = "generated_rules.yml"  # must match clock_rules_test_cases.yml's rule_files entry
 

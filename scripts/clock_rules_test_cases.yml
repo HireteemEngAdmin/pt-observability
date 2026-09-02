@@ -5,7 +5,7 @@
 # because that file is generated fresh from the real rules.yml every run,
 # never hand-copied. Run it with:
 #
-#   python3 grafana/provisioning/alerting/test_clock_rules.py
+#   python3 scripts/test_clock_rules.py
 #
 # See that script for how the two files are combined and which Prometheus
 # image/version it pins.
@@ -19,23 +19,23 @@ tests:
   # than page on a quiet period.
   - interval: 1m
     input_series:
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="1"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="1"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="5"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="5"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="15"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="15"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="30"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="30"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="45"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="45"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="60"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="60"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="90"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="90"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="120"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="120"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="+Inf"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="+Inf"}'
         values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
     alert_rule_test:
       - eval_time: 14m
@@ -46,23 +46,23 @@ tests:
   # on quiet data, not a rule that can never fire.
   - interval: 1m
     input_series:
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="1"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="1"}'
         values: "0+0x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="5"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="5"}'
         values: "0+0x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="15"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="15"}'
         values: "0+0x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="30"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="30"}'
         values: "0+1x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="45"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="45"}'
         values: "0+1x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="60"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="60"}'
         values: "0+1x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="90"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="90"}'
         values: "0+20x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="120"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="120"}'
         values: "0+20x14"
-      - series: 'clock_event_latency_seconds_bucket{type="clock_in",le="+Inf"}'
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="+Inf"}'
         values: "0+20x14"
     alert_rule_test:
       - eval_time: 14m
@@ -124,22 +124,25 @@ tests:
           - exp_labels:
               environment: production
 
-  # Fresh heartbeat: last success tracks wall time closely, so time() - value stays
-  # near zero and well under the 300s threshold.
+  # Fresh heartbeat: the drain's last run tracks wall time closely (it starts a run
+  # unconditionally every cycle, whether that run succeeds or not), so
+  # time() - value stays near zero and well under the 300s threshold.
   - interval: 1m
     input_series:
-      - series: 'cronjob_last_success_timestamp_seconds{job_name="clock-events-drain"}'
+      - series: 'cronjob_last_run_timestamp_seconds{job_name="clock-events-drain"}'
         values: "0+60x10"
     alert_rule_test:
       - eval_time: 5m
         alertname: ClockDrainStalled
         exp_alerts: []
 
-  # Stalled heartbeat: last success freezes at t=60s while time() keeps advancing,
-  # so by t=600s the gap is 540s, past the 300s threshold.
+  # Stalled heartbeat: last run freezes at t=60s while time() keeps advancing, so
+  # by t=600s the gap is 540s, past the 300s threshold. This is the scheduler or
+  # process being gone, not a run that merely failed: a failed-but-running drain
+  # still updates last_run every cycle.
   - interval: 1m
     input_series:
-      - series: 'cronjob_last_success_timestamp_seconds{job_name="clock-events-drain"}'
+      - series: 'cronjob_last_run_timestamp_seconds{job_name="clock-events-drain"}'
         values: "0 60 60 60 60 60 60 60 60 60 60"
     alert_rule_test:
       - eval_time: 10m

@@ -97,12 +97,14 @@ the next host migration loses it:
   the JSON, or the next regeneration silently reverts the change.
 - **Alert rules**: Alerting > Alert rules > Export > YAML into
   `grafana/provisioning/alerting/` and commit. The `clock` group has a
-  runnable proof it still fires: `python3
-  grafana/provisioning/alerting/test_clock_rules.py` (needs PyYAML and
-  Docker) extracts each rule's expression straight from `rules.yml` and
-  checks it against `clock_rules_test_cases.yml` with `promtool test rules`,
-  pinned to the same `prom/prometheus:v3.2.0` this stack runs. Run it after
-  touching any `clock` rule, before committing.
+  runnable proof it still fires: `python3 scripts/test_clock_rules.py`
+  (needs PyYAML and Docker) extracts each rule's expression straight from
+  `rules.yml` and checks it against `scripts/clock_rules_test_cases.yml`
+  with `promtool test rules`, pinned to the same `prom/prometheus:v3.2.0`
+  this stack runs. Lives in `scripts/`, not next to `rules.yml`, since that
+  directory is bind-mounted read-only into Grafana and a stray file there
+  breaks the alerting provisioner. Run it after touching any `clock` rule,
+  before committing.
 - Datasources are already provisioned from files; do not create duplicates in
   the UI. Contact points and policies belong to the alerting phase below.
 

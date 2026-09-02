@@ -252,15 +252,27 @@ groups:
       # go quiet, not red, exactly when the drain stops: a frozen gauge does not cross
       # 50, a dead counter does not increment, and a stale histogram stops feeding new
       # buckets. This is the only one of the four watching whether the drain is still
-      # alive at all, via the same heartbeat cronjob_last_success_timestamp_seconds
-      # every other cron job in this stack already relies on.
+      # alive at all.
+      #
+      # Watches cronjob_last_run_timestamp_seconds, set unconditionally at the start
+      # of every run (instrumentCronJob.js:174), not cronjob_last_success_timestamp_
+      # seconds, which is only set when status is 'success' (instrumentCronJob.js:252).
+      # The drain quarantines only foreign-key violations; every other error retries
+      # indefinitely by design, so a single poison non-FK event marks every run
+      # 'partial' forever and would freeze last_success on a drain that is otherwise
+      # healthy and still draining everyone else. That is the always-red failure this
+      # file's header already rejects two other rules for.
       - uid: clock-drain-stalled
         title: ClockDrainStalled
         condition: THRESHOLD
         # Alerting, not OK: a scrape that returns nothing means the drain is gone or
         # wedged, which is exactly the condition this exists to catch. Every other
         # clock rule here treats missing data as "has not happened yet"; this one
-        # cannot, for the same reason CIPollerStalled cannot.
+        # cannot, for the same reason CIPollerStalled cannot. Kept Alerting even
+        # across a deliberate CLOCK_SERVICE_ENABLED=false rollback: a clock service
+        # that is not running is worth a page, arguably especially then, so nobody
+        # forgets it is off. See the annotation for what that means for an operator
+        # doing a planned rollback.
         noDataState: Alerting
         execErrState: Error
         # The drain cycles every 60s and restarts on its own deploys. Two minutes past
@@ -268,14 +280,16 @@ groups:
         for: 2m
         labels: { severity: p1, service: clock }
         annotations:
-          summary: The clock events drain has not completed a cycle in over 5 minutes
+          summary: The clock events drain has not run in over 5 minutes
           description: >-
             Punches have stopped reaching time_tracker entirely, and nothing else in
             this file reports it: ClockEventsBacklog and ClockEventsQuarantined can
             both stay silent while the drain is down, since a frozen gauge does not
             grow and a dead counter does not increment. Check the cron process's logs
             for the clock-events-drain job and restart it if the process itself is
-            gone.
+            gone. A deliberate CLOCK_SERVICE_ENABLED=false rollback also fires this
+            rule; if that is what is happening, silence it in Grafana for the
+            rollback's duration rather than treating this page as a surprise.
         data:
           - refId: A
             datasourceUid: prometheus
@@ -284,7 +298,7 @@ groups:
               refId: A
               instant: true
               editorMode: code
-              expr: time() - cronjob_last_success_timestamp_seconds{job_name="clock-events-drain"}
+              expr: time() - cronjob_last_run_timestamp_seconds{job_name="clock-events-drain"}
           - refId: THRESHOLD
             datasourceUid: __expr__
             model:
