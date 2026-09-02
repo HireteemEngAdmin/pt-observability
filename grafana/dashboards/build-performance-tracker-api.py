@@ -53,7 +53,19 @@ def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, le
     }
 
 
-def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, minv=None, fill=10):
+def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, minv=None, fill=10,
+       threshold=None, overrides=None):
+    # threshold draws a dashed reference line at that value, e.g. the 60s latency
+    # promise. overrides carries per-field fieldConfig overrides (see `override()`),
+    # for the rare panel that needs a series on its own axis or unit.
+    custom = {"drawStyle": "line", "lineWidth": 1, "fillOpacity": fill,
+              "showPoints": "never", "spanNulls": True,
+              "scaleDistribution": {"type": "linear"}}
+    thresholds = {"mode": "absolute", "steps": [{"color": "green", "value": None}]}
+    if threshold is not None:
+        custom["thresholdsStyle"] = {"mode": "dashed"}
+        thresholds = {"mode": "absolute", "steps": [{"color": "green", "value": None},
+                                                     {"color": "red", "value": threshold}]}
     return {
         "type": "timeseries", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": DS,
@@ -65,13 +77,15 @@ def ts(title, specs, x, y, w=12, h=8, unit="short", desc="", legend_calcs=None, 
         "fieldConfig": {"defaults": {
             "unit": unit,
             "min": minv,
-            "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": fill,
-                       "showPoints": "never", "spanNulls": True,
-                       "scaleDistribution": {"type": "linear"}},
+            "custom": custom,
             "color": {"mode": "palette-classic"},
-            "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": None}]},
-        }, "overrides": []},
+            "thresholds": thresholds,
+        }, "overrides": overrides or []},
     }
+
+
+def override(matcher_id, options, props):
+    return {"matcher": {"id": matcher_id, "options": options}, "properties": props}
 
 
 def loki_targets(*exprs, instant=False):
@@ -396,6 +410,130 @@ panels.append(ts(
     [("sum by (status) (rate(learnupon_events_processed_total[5m]))", "{{status}}")],
     12, y, w=12, unit="reqps", minv=0,
     desc="Emitted by the cron job. status=failed climbing precedes dead letter growth."))
+
+# ── Clock service ────────────────────────────────────────────────
+#
+# On this board, not a separate one, because correlation is the point: portal
+# saturation and clock latency need to sit on one time axis, and a separate
+# board would recreate the problem this row solves.
+#
+# Five of these metrics (aws_lambda_*) are bridged from CloudWatch by a poller
+# that writes once every five minutes; each is a gauge already holding
+# CloudWatch's own Sum or Average for that trailing window, not a counter that
+# climbs forever. rate() and increase() assume a monotonic counter, which is
+# false here, so ranges are totalled with sum_over_time() instead: it adds up
+# the completed five-minute sums the gauge already contains rather than
+# computing a rate off a series that jumps up and down. Every one of these
+# gauges holds its last value if the poller stops, so a flat reading can mean
+# a quiet Lambda or a stalled poller, and no panel here can tell those apart
+# alone.
+#
+# No template variables are applied to this section: this dashboard's
+# templating list is empty, and the only label the CloudWatch-bridged metrics
+# carry is environment, which none of this board's variables bind to anyway.
+y += 8
+panels.append(row("Clock service", y))
+y += 1
+
+# Step 1: immediate health. Four stats that should read zero.
+panels.append(stat(
+    "Events pending", "clock_events_pending", 0, y, w=6,
+    desc="Events queued by the clock service waiting to drain into time_tracker. Published "
+         "directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, "
+         "so this reflects the current depth rather than a five-minute-old sample. Red above "
+         "50 to match the Task 7 alert rule; normal operation reads at or near zero.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 50}]},
+    legend="pending"))
+panels.append(stat(
+    "Events dropped", "increase(clock_events_dropped_total[$__range])", 6, y, w=6,
+    desc="Events the clock service discarded rather than delivered, over the selected range. "
+         "Carries a reason label upstream, so more than one reason firing in the window shows "
+         "as more than one number in this panel rather than one blended total. Should read "
+         "zero; any value above it is a punch that never reached time_tracker.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="dropped"))
+panels.append(stat(
+    "Events quarantined", "increase(clock_events_quarantined_total[$__range])", 12, y, w=6,
+    desc="Events set aside for manual review rather than dropped or drained, over the "
+         "selected range. Should read zero; any value above it means an event needs a human "
+         "before it can be processed.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="quarantined"))
+panels.append(stat(
+    "Lambda errors", "sum_over_time(aws_lambda_errors[$__range])", 18, y, w=6,
+    desc="Lambda invocation errors, totalled over the selected range. aws_lambda_errors is a "
+         "CloudWatch-bridged gauge (see the section note above): sum_over_time adds up the "
+         "completed five-minute Sums it already holds across the range, which is the form "
+         "that matches what this series actually contains; increase() or rate() would "
+         "silently misread it, because the value is not a monotonic counter. Should read "
+         "zero.",
+    thresholds={"mode": "absolute", "steps": [
+        {"color": "green", "value": None}, {"color": "red", "value": 1}]},
+    legend="errors"))
+y += 4
+
+# Step 2: the latency the design promises.
+panels.append(ts(
+    "Punch-to-time_tracker latency (p50 / p95)",
+    [("histogram_quantile(0.50, sum by (le) (rate(clock_event_latency_seconds_bucket"
+      "[$__rate_interval])))", "p50"),
+     ("histogram_quantile(0.95, sum by (le) (rate(clock_event_latency_seconds_bucket"
+      "[$__rate_interval])))", "p95")],
+    0, y, w=24, unit="s", minv=0, threshold=60,
+    desc="The design promises a punch reaches time_tracker within a minute; this is that "
+         "promise, watched continuously rather than audited by hand. The dashed line at 60 "
+         "seconds is that one-minute promise made visible on the graph: p95 crossing it means "
+         "the promise is being broken for at least 1 in 20 punches, not merely that something "
+         "is slower than usual."))
+y += 8
+
+# Step 3: the migration view.
+panels.append(ts(
+    "Migration progress: clock service vs portal punches",
+    [("sum by (company_slug) (rate(clock_events_drained_total[$__rate_interval]))", "{{company_slug}}"),
+     ("sum(rate(webwork_requests_total{endpoint=~\"/time-tracking/(start|stop)\"}"
+      "[$__rate_interval]))", "Portal punches")],
+    0, y, w=24, unit="reqps", minv=0,
+    desc="Punches drained through the clock service, by brand, next to the portal's own "
+         "/time-tracking/start and /stop calls on the same axis: this is the curve that says "
+         "when Reach can be enabled and when the portal's own start and stop endpoints can be "
+         "deleted. webwork_requests_total is published by the portal only; the Lambda's "
+         "WebWork calls never pass through it, so these two lines are disjoint populations, "
+         "not a double count of the same punches. As the migration completes, Portal punches "
+         "is expected to fall to zero while the by-brand clock lines carry everything; a "
+         "Portal punches line flatlined at zero later is the success condition this panel was "
+         "built to show, not a sign the panel is broken."))
+y += 8
+
+# Step 4: Lambda infrastructure.
+panels.append(ts(
+    "Lambda invocations and duration",
+    [("aws_lambda_invocations", "{{environment}} invocations"),
+     ("aws_lambda_duration_seconds", "{{environment}} duration (s)")],
+    0, y, w=18, unit="short", minv=0,
+    overrides=[override("byRegexp", ".*duration.*",
+                         [{"id": "unit", "value": "s"},
+                          {"id": "custom.axisPlacement", "value": "right"}])],
+    desc="Invocations (left axis, a count) and duration (right axis, seconds) for the clock "
+         "Lambda, sharing one panel because a count and a duration cannot share a meaningful "
+         "scale on their own axis. Both series are CloudWatch-bridged gauges (see the section "
+         "note above): invocations already holds CloudWatch's Sum of calls for the trailing "
+         "five-minute window, duration already holds its Average, and both are plotted "
+         "directly rather than through rate() or increase() because a gauge is not a counter. "
+         "A flat line here is consistent with either quiet traffic or a stalled poller; this "
+         "panel alone cannot tell the two apart."))
+panels.append(stat(
+    "Lambda throttles (range)", "sum_over_time(aws_lambda_throttles[$__range])", 18, y, w=6, h=8,
+    desc="Lambda invocations throttled by concurrency limits, totalled over the selected "
+         "range. Same gauge shape as the health stats above: aws_lambda_throttles holds "
+         "CloudWatch's own five-minute Sum, so sum_over_time adds up the completed window "
+         "sums instead of increase() or rate() misreading a series that is not a monotonic "
+         "counter. Any value above zero means the Lambda hit its concurrency ceiling and a "
+         "punch was delayed or rejected.",
+    legend="throttles"))
 
 # ── Logs ─────────────────────────────────────────────────────────
 y += 8

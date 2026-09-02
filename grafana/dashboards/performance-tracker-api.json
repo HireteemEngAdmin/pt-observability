@@ -2046,7 +2046,7 @@
     },
     {
       "type": "row",
-      "title": "Logs",
+      "title": "Clock service",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2058,15 +2058,606 @@
       "panels": []
     },
     {
+      "type": "stat",
+      "title": "Events pending",
+      "description": "Events queued by the clock service waiting to drain into time_tracker. Published directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, so this reflects the current depth rather than a five-minute-old sample. Red above 50 to match the Task 7 alert rule; normal operation reads at or near zero.",
+      "id": 35,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 89
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clock_events_pending",
+          "legendFormat": "pending",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Events dropped",
+      "description": "Events the clock service discarded rather than delivered, over the selected range. Carries a reason label upstream, so more than one reason firing in the window shows as more than one number in this panel rather than one blended total. Should read zero; any value above it is a punch that never reached time_tracker.",
+      "id": 36,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 89
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "increase(clock_events_dropped_total[$__range])",
+          "legendFormat": "dropped",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Events quarantined",
+      "description": "Events set aside for manual review rather than dropped or drained, over the selected range. Should read zero; any value above it means an event needs a human before it can be processed.",
+      "id": 37,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 89
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "increase(clock_events_quarantined_total[$__range])",
+          "legendFormat": "quarantined",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Lambda errors",
+      "description": "Lambda invocation errors, totalled over the selected range. aws_lambda_errors is a CloudWatch-bridged gauge (see the section note above): sum_over_time adds up the completed five-minute Sums it already holds across the range, which is the form that matches what this series actually contains; increase() or rate() would silently misread it, because the value is not a monotonic counter. Should read zero.",
+      "id": 38,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 89
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum_over_time(aws_lambda_errors[$__range])",
+          "legendFormat": "errors",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Punch-to-time_tracker latency (p50 / p95)",
+      "description": "The design promises a punch reaches time_tracker within a minute; this is that promise, watched continuously rather than audited by hand. The dashed line at 60 seconds is that one-minute promise made visible on the graph: p95 crossing it means the promise is being broken for at least 1 in 20 punches, not merely that something is slower than usual.",
+      "id": 39,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 93
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(clock_event_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(clock_event_latency_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Migration progress: clock service vs portal punches",
+      "description": "Punches drained through the clock service, by brand, next to the portal's own /time-tracking/start and /stop calls on the same axis: this is the curve that says when Reach can be enabled and when the portal's own start and stop endpoints can be deleted. webwork_requests_total is published by the portal only; the Lambda's WebWork calls never pass through it, so these two lines are disjoint populations, not a double count of the same punches. As the migration completes, Portal punches is expected to fall to zero while the by-brand clock lines carry everything; a Portal punches line flatlined at zero later is the success condition this panel was built to show, not a sign the panel is broken.",
+      "id": 40,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (company_slug) (rate(clock_events_drained_total[$__rate_interval]))",
+          "legendFormat": "{{company_slug}}",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(webwork_requests_total{endpoint=~\"/time-tracking/(start|stop)\"}[$__rate_interval]))",
+          "legendFormat": "Portal punches",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lambda invocations and duration",
+      "description": "Invocations (left axis, a count) and duration (right axis, seconds) for the clock Lambda, sharing one panel because a count and a duration cannot share a meaningful scale on their own axis. Both series are CloudWatch-bridged gauges (see the section note above): invocations already holds CloudWatch's Sum of calls for the trailing five-minute window, duration already holds its Average, and both are plotted directly rather than through rate() or increase() because a gauge is not a counter. A flat line here is consistent with either quiet traffic or a stalled poller; this panel alone cannot tell the two apart.",
+      "id": 41,
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 109
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "aws_lambda_invocations",
+          "legendFormat": "{{environment}} invocations",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "aws_lambda_duration_seconds",
+          "legendFormat": "{{environment}} duration (s)",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*duration.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Lambda throttles (range)",
+      "description": "Lambda invocations throttled by concurrency limits, totalled over the selected range. Same gauge shape as the health stats above: aws_lambda_throttles holds CloudWatch's own five-minute Sum, so sum_over_time adds up the completed window sums instead of increase() or rate() misreading a series that is not a monotonic counter. Any value above zero means the Lambda hit its concurrency ceiling and a punch was delayed or rejected.",
+      "id": 42,
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 109
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum_over_time(aws_lambda_throttles[$__range])",
+          "legendFormat": "throttles",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 117
+      },
+      "id": 43,
+      "collapsed": false,
+      "panels": []
+    },
+    {
       "type": "logs",
       "title": "Errors and warnings",
-      "id": 35,
+      "id": 44,
       "description": "Error and warning lines from the API, read from the level field. filename tells the two clustered instances apart (server-out-8 vs server-out-9). Lines that fail to parse are kept: those are the crashes that never reach the logger, and dropping them would hide exactly the worst failures.",
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 89
+        "y": 118
       },
       "datasource": {
         "type": "loki",
