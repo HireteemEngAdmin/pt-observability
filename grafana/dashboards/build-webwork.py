@@ -242,39 +242,36 @@ panels.append(stat(
     "Error rate",
     f'(sum(rate(webwork_errors_total{{{SEL}}}[$__range])) or vector(0)) '
     f'/ sum(rate(webwork_requests_total{{{SEL}}}[$__range]))',
-    9, y, w=3, unit="percentunit", dec=2,
+    9, y, w=2, unit="percentunit", dec=2,
     desc="or vector(0) so a clean period renders 0 rather than \"No data\", which would be "
          "indistinguishable from a broken scrape.",
     steps=[{"color": "green", "value": None}, {"color": "orange", "value": 0.01},
            {"color": "red", "value": 0.05}]))
 panels.append(stat(
-    "Requests / min (+ unfiltered clock)",
-    f'(sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) or vector(0)) * 60 '
-    f'+ (max(clock_webwork_calls) or vector(0)) / 5',
-    12, y, w=3, dec=1,
-    desc="Portal calls per minute, filtered by job/endpoint/method/status like every other "
-         "tile in this row, plus the clock service's, which is not: clock_webwork_calls "
-         "carries none of those labels to filter by, so its contribution is always every "
-         "brand's clock traffic, in full, regardless of what this dashboard is set to. "
-         "Narrow $endpoint to one value and this tile reads that endpoint's portal rate plus "
-         "the whole clock total, not that endpoint's combined rate; the title says so because "
-         "a 700-character description does not stop a glance from misreading a single blended "
-         "number. Aggregated with max(), not sum(): the gauge mirrors one upstream CloudWatch "
-         "figure rather than partitioning work across processes, so a second cron host "
-         "publishing the same reading would double it under sum(). Both terms carry "
-         "`or vector(0)`, same as elsewhere on this board, because a plain `+` between two "
-         "vectors returns nothing at all if either side is empty, and both legitimately can "
-         "be: the portal term goes empty whenever $endpoint/$status is narrowed to a value "
-         "with no traffic in the last 5m, and clock_webwork_calls has no series until the "
-         "poller's first successful set(), which is the state on day one and in any window "
-         "with no clock traffic. Without the guard this panel would go dark exactly when the "
-         "new caller is idle. clock_webwork_calls is a gauge holding CloudWatch's SampleCount "
-         "over the poller's five-minute window, so dividing by 5 (not 300, which is the "
-         "/second divisor used on the row above) converts it to calls per minute before "
-         "adding it to the portal rate. WebWork's documented ceiling is 60/min per workspace. "
-         "The gauge is only overwritten when CloudWatch returns a datapoint, so a quiet or "
-         "broken clock path holds its last value indefinitely and keeps adding that stale "
-         "number here, unlike the portal term which correctly falls to zero."))
+    "Requests / min",
+    f'(sum(rate(webwork_requests_total{{{SEL_STATUS}}}[5m])) or vector(0)) * 60',
+    11, y, w=4, dec=1,
+    legend="Portal", expr2='(max(clock_webwork_calls) or vector(0)) / 5',
+    legend2="Clock (all)",
+    desc="Two independent readings side by side, not summed into one figure: Portal honours "
+         "job/endpoint/method/status like every other tile in this row; Clock (all) never "
+         "can, since clock_webwork_calls carries none of those labels, so it is always every "
+         "brand's clock traffic regardless of what this dashboard is filtered to. They used "
+         "to be added together under one title, which silently implied a filtered combined "
+         "total that, under any endpoint or status filter, was not what the number showed. "
+         "Add the two boxes yourself for a rough check against WebWork's documented 60/min "
+         "ceiling. Aggregated with max(), not sum(): the clock gauge mirrors one upstream "
+         "CloudWatch figure rather than partitioning work across processes, so a second cron "
+         "host publishing the same reading would double it under sum(). Both terms carry "
+         "`or vector(0)` so an idle side reads 0 rather than \"No data\": clock_webwork_calls "
+         "has no series until the poller's first successful set(), which is the state on day "
+         "one and in any window with no clock traffic, and the portal term goes empty "
+         "whenever $endpoint/$status is narrowed to a value with no traffic in the last 5m. "
+         "clock_webwork_calls is a gauge holding CloudWatch's SampleCount over the poller's "
+         "five-minute window, so dividing by 5 converts it to calls per minute. The gauge is "
+         "only overwritten when CloudWatch returns a datapoint, so a quiet or broken clock "
+         "path holds its last value indefinitely, and an idle clock service and a broken one "
+         "read identically here."))
 panels.append(stat(
     "Requests (range)",
     f'sum(increase(webwork_requests_total{{{SEL_STATUS}}}[$__range])) or vector(0)',
