@@ -150,3 +150,70 @@ tests:
         exp_alerts:
           - exp_labels:
               job_name: clock-events-drain
+
+  # Every new punch landing beyond the top finite bucket: the finite buckets hold a
+  # flat baseline (rate 0) while +Inf climbs. The ratio reads 0/20 and fires.
+  #
+  # HONEST LIMIT OF THIS SCENARIO: it does NOT prove the ratio catches something the
+  # quantile missed. I checked by reverting the rule to histogram_quantile and
+  # re-running: this scenario still passes, because with every observation in +Inf
+  # the quantile returns the top finite bound, 120, which is over the old 60s
+  # threshold and fires too. On 2026-09-02 the real histogram had 108 of 111
+  # observations above 120s and histogram_quantile reported 44.8s and never fired,
+  # and I could not reproduce that reading here. The ratio is justified on its own
+  # terms, as the design promise stated directly and immune to the bucket ceiling,
+  # but treat the 44.8s reading as unexplained rather than fixed.
+  - interval: 1m
+    input_series:
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="1"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="5"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="15"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="30"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="45"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="60"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="90"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="120"}'
+        values: "3+0x14"
+      - series: 'clock_event_latency_seconds_bucket{type="in",le="+Inf"}'
+        values: "3+20x14"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: ClockDrainLatencyHigh
+        exp_alerts:
+          - exp_labels: {}
+
+  # ClockJobFailing fires on a job whose last run keeps ending in error. This is
+  # the 75-minute drain outage: the job ran every minute and failed every minute,
+  # so every other rule stayed quiet and only this status said so.
+  - interval: 1m
+    input_series:
+      - series: 'cronjob_last_run_status{job_name="clock-events-drain",status="error",environment="production"}'
+        values: "1+0x14"
+      - series: 'cronjob_last_run_status{job_name="clock-events-drain",status="success",environment="production"}'
+        values: "0+0x14"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClockJobFailing
+        exp_alerts:
+          - exp_labels:
+              job_name: clock-events-drain
+
+  # A healthy job does not fire it. Without this the rule could be pinned to a
+  # constant and the scenario above would still pass.
+  - interval: 1m
+    input_series:
+      - series: 'cronjob_last_run_status{job_name="clock-events-drain",status="error",environment="production"}'
+        values: "0+0x14"
+      - series: 'cronjob_last_run_status{job_name="clock-events-drain",status="success",environment="production"}'
+        values: "1+0x14"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClockJobFailing
+        exp_alerts: []
