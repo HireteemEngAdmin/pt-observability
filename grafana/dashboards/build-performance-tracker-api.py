@@ -441,19 +441,38 @@ panels.append(ts(
 # No template variables are applied to this section: this dashboard's
 # templating list is empty, and the only label the CloudWatch-bridged metrics
 # carry is environment, which none of this board's variables bind to anyway.
+#
+# Three panels here aggregate with max() where the rest of this file (and the
+# counters right next to them, dropped/quarantined) use sum(): clock_events_
+# pending, aws_lambda_errors and aws_lambda_throttles each mirror one upstream
+# number (a single DynamoDB count, CloudWatch's own per-function figures)
+# rather than partitioning work across instances, so summing what a second
+# process publishing the same reading would double-count is wrong, the same
+# reasoning DEDUP documents above for the LearnUpon queue gauges. This also
+# is not optional once `or vector(0)` is involved: `or` matches on the full
+# label set, vector(0) has none, and a real series here still carries job and
+# instance, which are never equal to that empty set, so a bare `metric or
+# vector(0)` unions a permanent phantom zero in on every healthy render
+# instead of ever replacing anything. max()/sum() strip labels to `{}` first,
+# which is what lets the fallback actually take over when the series is
+# absent.
 y += 8
 panels.append(row("Clock service", y))
 y += 1
 
 # Step 1: immediate health. Four stats that should read zero.
 panels.append(stat(
-    "Events pending", "clock_events_pending or vector(0)", 0, y, w=6,
+    "Events pending", "max(clock_events_pending) or vector(0)", 0, y, w=6,
     desc="Events queued by the clock service waiting to drain into time_tracker. Published "
          "directly by the clock cron jobs as a real-time gauge, not bridged from CloudWatch, "
-         "so this reflects the current depth rather than a five-minute-old sample. "
-         "`or vector(0)` so a gap in scraping this target reads as an explicit 0 rather than "
-         "a grey No data box that looks the same as the healthy state at a glance. Red above "
-         "50 to match the Task 7 alert rule; normal operation reads at or near zero.",
+         "so this reflects the current depth rather than a five-minute-old sample. Wrapped "
+         "in max(), not sum(): this gauge mirrors one upstream DynamoDB count rather than "
+         "partitioning work, so a second process reporting the same reading must not be "
+         "added to itself, and only a labelless aggregate lets the `or vector(0)` fallback "
+         "actually replace a missing series instead of being unioned in beside it as a "
+         "second, permanently-zero tile (a real series here still carries job/instance, "
+         "which never equals vector(0)'s empty label set). Red above 50 to match the "
+         "Task 7 alert rule; normal operation reads at or near zero.",
     thresholds={"mode": "absolute", "steps": [
         {"color": "green", "value": None}, {"color": "red", "value": 50}]},
     legend="pending"))
@@ -497,7 +516,7 @@ panels.append(stat(
     legend="quarantined"))
 panels.append(stat(
     "Lambda errors (worst 5-minute window)",
-    "max_over_time(aws_lambda_errors[$__range]) or vector(0)", 18, y, w=6,
+    "max(max_over_time(aws_lambda_errors[$__range])) or vector(0)", 18, y, w=6,
     desc="The single worst five-minute window's Lambda invocation errors inside the selected "
          "range, not a running total. aws_lambda_errors is a gauge that a CloudWatch poller "
          "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
@@ -505,10 +524,13 @@ panels.append(stat(
          "count each five-minute value roughly 20 times over, turning 3 real errors into 60. "
          "max_over_time takes the peak of those repeated samples instead, which answers "
          "\"did this happen\" correctly regardless of scrape rate or a gap in polling. The "
-         "value refreshes every five minutes and holds its last reading if the poller stops, "
-         "so a flat zero can also mean a dead poller rather than a healthy Lambda; "
-         "`or vector(0)` only covers the case where the series has no data point at all. "
-         "Should read zero.",
+         "outer max() is for the same reason as Events pending above: this is CloudWatch's "
+         "own single number for the function, not a per-instance count, so max() rather than "
+         "sum() avoids double-counting and is also what lets `or vector(0)` replace a "
+         "missing series instead of adding a permanent phantom zero beside it. The value "
+         "refreshes every five minutes and holds its last reading if the poller stops, so a "
+         "flat zero can also mean a dead poller rather than a healthy Lambda. Should read "
+         "zero.",
     thresholds={"mode": "absolute", "steps": [
         {"color": "green", "value": None}, {"color": "red", "value": 1}]},
     legend="errors"))
@@ -577,17 +599,22 @@ panels.append(ts(
          "cannot tell the two apart."))
 panels.append(stat(
     "Lambda throttles (worst 5-minute window)",
-    "max_over_time(aws_lambda_throttles[$__range]) or vector(0)", 18, y, w=6, h=8,
+    "max(max_over_time(aws_lambda_throttles[$__range])) or vector(0)", 18, y, w=6, h=8,
     desc="The single worst five-minute window's Lambda throttles inside the selected range, "
          "not a running total. aws_lambda_throttles is a gauge that a CloudWatch poller "
          "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
          "far more often (every 15s), so summing the raw samples with sum_over_time would "
          "count each five-minute value roughly 20 times over. max_over_time takes the peak of "
          "those repeated samples instead, which answers \"did this happen\" correctly "
-         "regardless of scrape rate or a gap in polling. The value refreshes every five "
-         "minutes and holds its last reading if the poller stops, so a flat zero can also mean "
-         "a dead poller rather than a healthy Lambda. Any value above zero means the Lambda "
-         "hit its concurrency ceiling and a punch was delayed or rejected.",
+         "regardless of scrape rate or a gap in polling. The outer max(), same as the other "
+         "two CloudWatch-bridged stats in this row, is because this is CloudWatch's own "
+         "single number rather than a per-instance count: max() avoids double-counting if a "
+         "second poller ever existed, and it is also what lets `or vector(0)` replace a "
+         "missing series instead of adding a permanent phantom zero beside it. The value "
+         "refreshes every five minutes and holds its last reading if the poller stops, so a "
+         "flat zero can also mean a dead poller rather than a healthy Lambda. Any value "
+         "above zero means the Lambda hit its concurrency ceiling and a punch was delayed or "
+         "rejected.",
     thresholds={"mode": "absolute", "steps": [
         {"color": "green", "value": None}, {"color": "red", "value": 1}]},
     legend="throttles"))
