@@ -85,6 +85,15 @@ def main():
         generated_doc = {"groups": [{"name": "shipped", "rules": rules}]}
         (tmp / GENERATED_NAME).write_text(yaml.safe_dump(generated_doc, sort_keys=False))
         shutil.copy(TEST_CASES_FILE, tmp / TEST_CASES_FILE.name)
+        # The prom/prometheus image runs as nobody (65534), and mkdtemp creates 0700
+        # owned by whoever ran this, so the bind mount is unreadable inside the
+        # container on a normal Linux host. Docker Desktop on macOS hides this by not
+        # enforcing the uid on shared paths, which is why it passed locally and failed
+        # the first time it was run on the VPS. These are throwaway rule fixtures in a
+        # per-run temp dir, so widening them costs nothing.
+        tmp.chmod(0o755)
+        for entry in tmp.iterdir():
+            entry.chmod(0o644)
 
         cmd = [
             "docker", "run", "--rm", "--entrypoint", "promtool",
