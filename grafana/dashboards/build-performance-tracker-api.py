@@ -25,11 +25,18 @@ def nid():
     return pid
 
 
-def targets(*specs):
+def targets(*specs, instant=False):
+    # instant=False (every existing caller) keeps the exact prior shape: range
+    # only, no "instant" key. instant=True is for a stat that reduces to one
+    # point anyway, so Grafana evaluates the query once instead of at every
+    # step across the dashboard's time range.
     out = []
     for i, (expr, legend) in enumerate(specs):
-        out.append({"datasource": DS, "expr": expr, "legendFormat": legend,
-                    "refId": chr(65 + i), "editorMode": "code", "range": True})
+        t = {"datasource": DS, "expr": expr, "legendFormat": legend,
+             "refId": chr(65 + i), "editorMode": "code", "range": not instant}
+        if instant:
+            t["instant"] = True
+        out.append(t)
     return out
 
 
@@ -38,11 +45,12 @@ def row(title, y):
             "id": nid(), "collapsed": False, "panels": []}
 
 
-def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, legend=""):
+def stat(title, expr, x, y, w=6, h=4, unit="short", desc="", thresholds=None, legend="",
+          instant=False):
     return {
         "type": "stat", "title": title, "description": desc, "id": nid(),
         "gridPos": {"h": h, "w": w, "x": x, "y": y}, "datasource": DS,
-        "targets": targets((expr, legend)),
+        "targets": targets((expr, legend), instant=instant),
         "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                     "colorMode": "value", "graphMode": "area", "textMode": "auto",
                     "justifyMode": "auto", "orientation": "auto"},
@@ -480,7 +488,7 @@ panels.append(stat(
     "Events dropped",
     "clamp_min((sum(clock_events_dropped_total) or vector(0)) - "
     "(sum(clock_events_dropped_total offset $__range) or vector(0)), 0)",
-    6, y, w=6,
+    6, y, w=6, instant=True,
     desc="Events the clock service discarded rather than delivered, over the selected range. "
          "summed across every reason into one total rather than increase(): "
          "clock_events_dropped_total is a labelled counter, so a reason's first-ever drop "
@@ -501,7 +509,7 @@ panels.append(stat(
     "Events quarantined",
     "clamp_min((sum(clock_events_quarantined_total) or vector(0)) - "
     "(sum(clock_events_quarantined_total offset $__range) or vector(0)), 0)",
-    12, y, w=6,
+    12, y, w=6, instant=True,
     desc="Events set aside for manual review rather than dropped or drained, over the "
          "selected range. Same range-offset difference as Events dropped and for the same "
          "reason: increase() reports 0 for the very first occurrence inside the window, "
@@ -516,7 +524,7 @@ panels.append(stat(
     legend="quarantined"))
 panels.append(stat(
     "Lambda errors (worst 5-minute window)",
-    "max(max_over_time(aws_lambda_errors[$__range])) or vector(0)", 18, y, w=6,
+    "max(max_over_time(aws_lambda_errors[$__range])) or vector(0)", 18, y, w=6, instant=True,
     desc="The single worst five-minute window's Lambda invocation errors inside the selected "
          "range, not a running total. aws_lambda_errors is a gauge that a CloudWatch poller "
          "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
@@ -581,25 +589,34 @@ y += 8
 
 # Step 4: Lambda infrastructure.
 panels.append(ts(
-    "Lambda invocations and duration",
+    "Lambda invocations, concurrency and duration",
     [("aws_lambda_invocations", "{{environment}} invocations"),
+     ("aws_lambda_concurrent_executions", "{{environment}} concurrent executions"),
      ("aws_lambda_duration_seconds", "{{environment}} duration (s)")],
     0, y, w=18, unit="short", minv=0,
     overrides=[override("byRegexp", ".*duration.*",
                          [{"id": "unit", "value": "s"},
                           {"id": "custom.axisPlacement", "value": "right"}])],
-    desc="Invocations (left axis, a count) and duration (right axis, seconds) for the clock "
-         "Lambda, sharing one panel because a count and a duration cannot share a meaningful "
-         "scale on their own axis. Both series are gauges bridged from CloudWatch: "
-         "invocations already holds CloudWatch's Sum of calls for the trailing five-minute "
-         "window, duration already holds its Average, both overwritten every five minutes by "
-         "the poller, and both plotted directly with no rate() or increase() because a gauge "
-         "is not a counter. Each holds its last reading if the poller stops, so a flat line "
-         "here is consistent with either quiet traffic or a stalled poller; this panel alone "
-         "cannot tell the two apart."))
+    desc="Invocations and concurrent executions (left axis, both counts) and duration (right "
+         "axis, seconds) for the clock Lambda, sharing one panel because a count and a "
+         "duration cannot share a meaningful scale on their own axis. Concurrent executions "
+         "sits beside invocations rather than off on its own: it is the number that predicts "
+         "a throttle, since concurrency climbing toward the account's reserved-concurrency "
+         "ceiling is what causes the throttles stat beside this panel to move, so a reader "
+         "chasing a throttle spike wants this line on the same read, not a separate panel. "
+         "All three series are gauges bridged from CloudWatch, each overwritten every five "
+         "minutes by the poller and each already holding CloudWatch's own aggregate for that "
+         "window rather than a raw sample (invocations Sum, duration Average; concurrent "
+         "executions is a live count rather than something summed or averaged over the "
+         "window), so all three are plotted directly with no rate() or increase() because a "
+         "gauge is not a counter. Each holds its last reading if the poller stops, so a flat "
+         "line here is consistent with either quiet traffic or a stalled poller; this panel "
+         "alone cannot tell the two apart. Metered on every poll regardless of whether "
+         "anything changed, at roughly nine cents a month of the poller's total cost; this "
+         "panel is the only reader of it, so that cost now buys something."))
 panels.append(stat(
     "Lambda throttles (worst 5-minute window)",
-    "max(max_over_time(aws_lambda_throttles[$__range])) or vector(0)", 18, y, w=6, h=8,
+    "max(max_over_time(aws_lambda_throttles[$__range])) or vector(0)", 18, y, w=6, h=8, instant=True,
     desc="The single worst five-minute window's Lambda throttles inside the selected range, "
          "not a running total. aws_lambda_throttles is a gauge that a CloudWatch poller "
          "overwrites every five minutes with that window's own Sum; Prometheus itself scrapes "
@@ -618,6 +635,24 @@ panels.append(stat(
     thresholds={"mode": "absolute", "steps": [
         {"color": "green", "value": None}, {"color": "red", "value": 1}]},
     legend="throttles"))
+y += 8
+
+# Step 5: context sync. Half this service and, until now, on no panel at
+# all: the only place it showed up was a status cell on the WebWork board.
+panels.append(ts(
+    "Context sync: items and writes",
+    [("clock_context_items", "{{company_slug}} items"),
+     ("rate(clock_context_items_written_total[$__rate_interval])", "written/s")],
+    0, y, w=12, unit="short", minv=0,
+    overrides=[override("byName", "written/s",
+                         [{"id": "unit", "value": "wps"},
+                          {"id": "custom.axisPlacement", "value": "right"}])],
+    desc="Whether the context sync is fresh and actually writing. clock_context_items (left "
+         "axis) is the live item count per brand, held by the clock-context-sync cron job. "
+         "clock_context_items_written_total (right axis, writes/second) is how many of them "
+         "changed and got written in this window. written/s reading zero is the normal "
+         "steady state, not a failure: the sync only writes what changed since its last run, "
+         "so a quiet period with nothing new produces zero writes by design, not an outage."))
 
 # ── Logs ─────────────────────────────────────────────────────────
 y += 8

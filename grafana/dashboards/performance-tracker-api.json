@@ -2145,7 +2145,8 @@
           "legendFormat": "dropped",
           "refId": "A",
           "editorMode": "code",
-          "range": true
+          "range": false,
+          "instant": true
         }
       ],
       "options": {
@@ -2208,7 +2209,8 @@
           "legendFormat": "quarantined",
           "refId": "A",
           "editorMode": "code",
-          "range": true
+          "range": false,
+          "instant": true
         }
       ],
       "options": {
@@ -2271,7 +2273,8 @@
           "legendFormat": "errors",
           "refId": "A",
           "editorMode": "code",
-          "range": true
+          "range": false,
+          "instant": true
         }
       ],
       "options": {
@@ -2480,8 +2483,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Lambda invocations and duration",
-      "description": "Invocations (left axis, a count) and duration (right axis, seconds) for the clock Lambda, sharing one panel because a count and a duration cannot share a meaningful scale on their own axis. Both series are gauges bridged from CloudWatch: invocations already holds CloudWatch's Sum of calls for the trailing five-minute window, duration already holds its Average, both overwritten every five minutes by the poller, and both plotted directly with no rate() or increase() because a gauge is not a counter. Each holds its last reading if the poller stops, so a flat line here is consistent with either quiet traffic or a stalled poller; this panel alone cannot tell the two apart.",
+      "title": "Lambda invocations, concurrency and duration",
+      "description": "Invocations and concurrent executions (left axis, both counts) and duration (right axis, seconds) for the clock Lambda, sharing one panel because a count and a duration cannot share a meaningful scale on their own axis. Concurrent executions sits beside invocations rather than off on its own: it is the number that predicts a throttle, since concurrency climbing toward the account's reserved-concurrency ceiling is what causes the throttles stat beside this panel to move, so a reader chasing a throttle spike wants this line on the same read, not a separate panel. All three series are gauges bridged from CloudWatch, each overwritten every five minutes by the poller and each already holding CloudWatch's own aggregate for that window rather than a raw sample (invocations Sum, duration Average; concurrent executions is a live count rather than something summed or averaged over the window), so all three are plotted directly with no rate() or increase() because a gauge is not a counter. Each holds its last reading if the poller stops, so a flat line here is consistent with either quiet traffic or a stalled poller; this panel alone cannot tell the two apart. Metered on every poll regardless of whether anything changed, at roughly nine cents a month of the poller's total cost; this panel is the only reader of it, so that cost now buys something.",
       "id": 41,
       "gridPos": {
         "h": 8,
@@ -2510,9 +2513,20 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "expr": "aws_lambda_concurrent_executions",
+          "legendFormat": "{{environment}} concurrent executions",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "aws_lambda_duration_seconds",
           "legendFormat": "{{environment}} duration (s)",
-          "refId": "B",
+          "refId": "C",
           "editorMode": "code",
           "range": true
         }
@@ -2601,7 +2615,8 @@
           "legendFormat": "throttles",
           "refId": "A",
           "editorMode": "code",
-          "range": true
+          "range": false,
+          "instant": true
         }
       ],
       "options": {
@@ -2640,28 +2655,126 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Context sync: items and writes",
+      "description": "Whether the context sync is fresh and actually writing. clock_context_items (left axis) is the live item count per brand, held by the clock-context-sync cron job. clock_context_items_written_total (right axis, writes/second) is how many of them changed and got written in this window. written/s reading zero is the normal steady state, not a failure: the sync only writes what changed since its last run, so a quiet period with nothing new produces zero writes by design, not an outage.",
+      "id": 43,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 117
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clock_context_items",
+          "legendFormat": "{{company_slug}} items",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(clock_context_items_written_total[$__rate_interval])",
+          "legendFormat": "written/s",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "written/s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "wps"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "type": "row",
       "title": "Logs",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 125
       },
-      "id": 43,
+      "id": 44,
       "collapsed": false,
       "panels": []
     },
     {
       "type": "logs",
       "title": "Errors and warnings",
-      "id": 44,
+      "id": 45,
       "description": "Error and warning lines from the API, read from the level field. filename tells the two clustered instances apart (server-out-8 vs server-out-9). Lines that fail to parse are kept: those are the crashes that never reach the logger, and dropping them would hide exactly the worst failures.",
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 126
       },
       "datasource": {
         "type": "loki",
