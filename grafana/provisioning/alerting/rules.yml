@@ -399,6 +399,14 @@ groups:
 
       # 60 is one of the histogram's own bucket boundaries, not an interpolated guess,
       # so this fires exactly when more than 5% of punches cross a full minute.
+      # Reads the fraction of punches inside the 60s bucket rather than
+      # histogram_quantile, and this is not a refactor. On 2026-09-02 the drain was
+      # denied DynamoDB for 75 minutes; when it recovered, 108 of 111 observations
+      # landed above 120s, and the quantile form reported 44.8s and never fired.
+      # The top finite bucket is 120s, so once a breach exceeds it the histogram can
+      # no longer say by how much and the quantile degrades in exactly the case worth
+      # paging on. A ratio against le="60" cannot degrade that way: it is the design
+      # promise stated directly, "at least 95% of punches land within a minute".
       - uid: clock-drain-latency-high
         title: ClockDrainLatencyHigh
         condition: THRESHOLD
@@ -407,13 +415,13 @@ groups:
         for: 10m
         labels: { severity: p2, service: clock }
         annotations:
-          summary: p95 punch-to-time_tracker latency has been above 60s for 10 minutes
+          summary: more than 5% of punches took over 60s to reach time_tracker
           description: >-
-            More than 5% of punches are taking over a minute to land in time_tracker.
-            Check ClockEventsBacklog and Postgres load first: latency rises when the
+            Check ClockJobFailing and ClockEventsBacklog first: latency rises when the
             drain falls behind, not usually because a single write is slow. A window
-            with no punches evaluates to NaN here, which does not satisfy this
-            threshold, so this stays silent rather than paging on empty data.
+            with no punches makes both sides zero, so the ratio is NaN and does not
+            satisfy this threshold, and the rule stays silent rather than paging on
+            empty data.
         data:
           - refId: A
             datasourceUid: prometheus
@@ -423,8 +431,9 @@ groups:
               instant: true
               editorMode: code
               expr: >-
-                histogram_quantile(0.95, sum by (le)
-                (rate(clock_event_latency_seconds_bucket[10m])))
+                sum(rate(clock_event_latency_seconds_bucket{le="60"}[10m]))
+                /
+                sum(rate(clock_event_latency_seconds_bucket{le="+Inf"}[10m]))
           - refId: THRESHOLD
             datasourceUid: __expr__
             model:
@@ -432,4 +441,109 @@ groups:
               type: threshold
               expression: A
               conditions:
-                - evaluator: { type: gt, params: [60] }
+                - evaluator: { type: lt, params: [0.95] }
+
+      # The gap the 2026-09-02 incident proved. The drain was denied DynamoDB for 75
+      # minutes and not one of the other four rules fired, each for its own reason:
+      # ClockEventsBacklog reads clock_events_pending, which the drain itself sets, so
+      # a run that throws before that line leaves the gauge frozen at its last value
+      # (it read 0 throughout); ClockDrainStalled watches last_run_timestamp, which
+      # kept updating because the job ran every minute and failed; and
+      # ClockDrainLatencyHigh had no observations to quantile while nothing drained.
+      # The only true signal was cronjob_last_run_status, which had a panel and no
+      # alert. This is that alert.
+      #
+      # Covers all three clock jobs rather than the two on the data path. A poller-only
+      # failure paging at p1 is over-eager, and that is the accepted cost: under-alerting
+      # on the drain is what made a 75-minute write outage invisible. Split it if the
+      # poller proves noisy.
+      #
+      # Deliberately NOT fleet-wide. The same gap covers the other 22 cron jobs, and
+      # distributor-delivery has 68 error runs and zero successes right now, so a
+      # fleet-wide rule would fire on merge for a pre-existing failure nobody has
+      # triaged. That is how a new alert gets silenced in its first week. Widening this
+      # belongs to whoever owns those jobs, after they triage what it would surface.
+      - uid: clock-job-failing
+        title: ClockJobFailing
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        labels: { severity: p1, service: clock }
+        annotations:
+          summary: a clock cron job has been failing for 5 minutes
+          description: >-
+            The job named in job_name is completing with status=error. If it is
+            clock-events-drain, punches are being recorded in DynamoDB but are not
+            reaching time_tracker, and they will drain on their own once the job
+            recovers. Read the error on the cron host with
+            "pm2 logs cron --lines 200 --nostream | grep <job_name>". The 2026-09-02
+            case was an IAM policy version applied without rendering __ENV__, which
+            revoked DynamoDB from the whole cron user.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: >-
+                max by (job_name)
+                (cronjob_last_run_status{job_name=~"clock-.*", status="error"})
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # The failure mode no other rule here can see. On 2026-09-01 the clock API
+      # returned 24 5xx in one hour while aws_lambda_errors read 0 for the same window,
+      # and both were right: index.js catches every exception and returns json(500, ...),
+      # which AWS counts as a successful invocation. The Errors metric only sees
+      # unhandled exceptions and timeouts, so the panel labelled "should read zero" read
+      # zero while 24 people got a 500. The gateway's own 5xx is the only signal that
+      # sees a handled one.
+      #
+      # Sum rather than a rate: this is a gauge the CloudWatch poller rewrites every five
+      # minutes holding the gateway's own Sum for its window, so rate() and increase() are
+      # both wrong on it, and max_over_time answers the question the panel next to it asks.
+      # A quiet window publishes 0, not nothing, so an absent series means the poller is
+      # down or CLOCK_API_GATEWAY_ID is wrong, and ClockJobFailing covers the first.
+      - uid: clock-api-5xx
+        title: ClockApiServerErrors
+        condition: THRESHOLD
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        labels: { severity: p1, service: clock }
+        annotations:
+          summary: the clock API returned server errors in the last five minutes
+          description: >-
+            Members are getting a 500 from clock-in, clock-out or status. This does not
+            show up in aws_lambda_errors, which reads 0 for a handled 500, so this rule
+            is the only alert that sees it. The Lambda logs the upstream cause at warn
+            level before returning; read them in CloudWatch Logs for /aws/lambda/
+            pt-clock-prod. The 2026-09-01 occurrence was 24 errors inside a single hour
+            with nothing either side, which is the shape of one upstream cause rather
+            than a chronic rate.
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: max(aws_apigateway_5xx)
+          - refId: THRESHOLD
+            datasourceUid: __expr__
+            model:
+              refId: THRESHOLD
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
