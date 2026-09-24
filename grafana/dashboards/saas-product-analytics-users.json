@@ -1,0 +1,416 @@
+{
+  "uid": "pt-saas-analytics-users",
+  "title": "SaaS Product Analytics: Users",
+  "description": "RESTRICTED. Named user lists for the Performance Tracker: the most active users and the inactive users, with full names, email addresses and company. Restrict this dashboard's permissions. The aggregate product view is 'SaaS Product Analytics' (uid pt-saas-analytics), which identifies nobody and can be shared freely; the two are separate dashboards because Grafana grants access per dashboard rather than per panel, so mixing them would force the product metrics behind this restriction. Both queries read PostgreSQL through a read-only role limited to four tables, and neither has been executed yet: the datasource's SSH tunnel is not up.",
+  "tags": [
+    "performance-tracker",
+    "observability",
+    "product",
+    "analytics",
+    "pii",
+    "restricted"
+  ],
+  "links": [
+    {
+      "type": "link",
+      "title": "Aggregate product analytics",
+      "url": "/d/pt-saas-analytics/",
+      "tooltip": "Active users, logins, feature usage, tenants and retention. Identifies nobody.",
+      "icon": "external link",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "tags": []
+    }
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Scope",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "text",
+      "title": "This dashboard names individuals",
+      "id": 2,
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Both tables below carry **full names, email addresses and the company each person works for**. Restrict this dashboard's permissions accordingly.\n\nThe aggregate product view - active users, logins, feature usage, tenants, retention cohorts - is on **SaaS Product Analytics** (`/d/pt-saas-analytics`), linked at the top of this page. Nothing on that dashboard identifies anyone, so it can be shared freely. This split exists because Grafana grants access per dashboard and not per panel: together in one dashboard, the product numbers would inherit this dashboard's restrictions.\n\n**Neither query here has run yet.** The PostgreSQL datasource is provisioned (uid `postgres`) but its SSH tunnel is not up, so the panels are empty and the SQL is unverified against the real schema. It was written from the Sequelize models in performance-tracker `backend/models/`.\n\n**Test accounts excluded** in both queries: `email LIKE 'mocktm_%'` and `email LIKE '%demo%'`. Deliberately *not* excluded: `@hireteem.com` and `@getreach.com`. Those are the Team Members. They are real users and most of the activity."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Most active users",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 3,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Most active users in the selected range",
+      "description": "The 200 busiest users over the dashboard's time range, by rows written to action_logs. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears as active. So this ranks people by how much they change, not by how much they use: a heavy reader with no mutations does not appear at all beyond their login rows, and that is a property of the data rather than of the query. 'active days' counts distinct UTC days, because created_at is timestamptz and the session runs at the server's UTC while the dashboard renders in browser time. The company column can be empty, and those rows are always shown whatever the Company filter is set to: a user with no TenantId belongs to no company, and in practice that is the super_admins, who would otherwise be the most active accounts in the system and silently absent. Bounded by the time range because action_logs is 2.1M rows and 309 MB with no usable created_at index, so widening the range costs real time. Not yet executed: the PostgreSQL datasource is provisioned but its SSH tunnel is not up, so 172.17.0.1:5432 is closed. Column names come from the Sequelize models in performance-tracker backend/models/, not from the server. Expect to correct something the first time it runs.",
+      "id": 4,
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "SELECT u.name                                                     AS \"name\",\n       u.email                                                    AS \"email\",\n       c.slug                                                     AS \"company\",\n       u.role                                                     AS \"role\",\n       count(*)                                                   AS \"actions\",\n       count(*) FILTER (WHERE a.route = '/login')                  AS \"logins\",\n       count(*) FILTER (WHERE a.route <> '/login')                 AS \"mutations\",\n       count(DISTINCT date_trunc('day', a.created_at))             AS \"active days\",\n       max(a.created_at)                                          AS \"last seen\"\n  FROM action_logs a\n  JOIN \"Users\"    u ON u.id = a.user_id\n  LEFT JOIN \"Tenants\" t ON t.id = u.\"TenantId\"\n  LEFT JOIN companies c ON c.id = t.\"CompanyId\"\n WHERE $__timeFilter(a.created_at)\n   AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n   AND (c.slug IN (${company_slug:sqlstring}) OR c.slug IS NULL)\n   AND u.role IN (${user_role:sqlstring})\n GROUP BY u.id, u.name, u.email, c.slug, u.role\n ORDER BY count(*) DESC\n LIMIT 200",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actions"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "logins"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "mutations"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "active days"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "row",
+      "title": "Inactive users",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 5,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Users with no login for $inactive_days days",
+      "description": "Users who exist and are not logging in, ordered oldest first with the never-logged-in rows at the top. The kind column separates the two problems that share this symptom: 'never logged in' is an onboarding failure, 'gone quiet' is a churn signal, and they need different follow-up. Measured at the time of writing: 2156 of 5384 users have never logged in and 1381 are deactivated. Deactivated users are flagged rather than excluded, because they are not churn and an offboarding audit wants them visible. Built on last_login rather than action_logs, which makes it cheap and also means it counts a login even if the user then only read, so this list and the leaderboard above can legitimately disagree about the same person. Ignores the dashboard time range by design: 'quiet since' is relative to now, not to the selected window. Not yet executed: the PostgreSQL datasource is provisioned but its SSH tunnel is not up, so 172.17.0.1:5432 is closed. Column names come from the Sequelize models in performance-tracker backend/models/, not from the server. Expect to correct something the first time it runs.",
+      "id": 6,
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "SELECT u.name                                              AS \"name\",\n       u.email                                             AS \"email\",\n       c.slug                                              AS \"company\",\n       u.role                                              AS \"role\",\n       CASE WHEN u.last_login IS NULL THEN 'never logged in'\n            ELSE 'gone quiet' END                          AS \"kind\",\n       u.\"createdAt\"                                       AS \"signed up\",\n       u.last_login                                        AS \"last login\",\n       CASE WHEN u.last_login IS NULL THEN NULL\n            ELSE (now()::date - u.last_login::date) END    AS \"days quiet\",\n       (u.deactivated_at IS NOT NULL)                      AS \"deactivated\"\n  FROM \"Users\" u\n  LEFT JOIN \"Tenants\" t ON t.id = u.\"TenantId\"\n  LEFT JOIN companies c ON c.id = t.\"CompanyId\"\n WHERE u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n   AND (c.slug IN (${company_slug:sqlstring}) OR c.slug IS NULL)\n   AND u.role IN (${user_role:sqlstring})\n   AND (u.last_login IS NULL\n        OR u.last_login < now() - interval '1 day' * $inactive_days)\n ORDER BY u.last_login ASC NULLS FIRST\n LIMIT 500",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "days quiet"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "company_slug",
+        "label": "Company",
+        "type": "custom",
+        "query": "teem,reach",
+        "options": [
+          {
+            "text": "teem",
+            "value": "teem",
+            "selected": true
+          },
+          {
+            "text": "reach",
+            "value": "reach",
+            "selected": true
+          }
+        ],
+        "current": {
+          "text": [
+            "teem",
+            "reach"
+          ],
+          "value": [
+            "teem",
+            "reach"
+          ]
+        },
+        "multi": true,
+        "includeAll": false,
+        "description": "The two tenant companies. Interpolated with the sqlstring format, which quotes and escapes each value, so this is a value list and not concatenated user input."
+      },
+      {
+        "name": "user_role",
+        "label": "User role",
+        "type": "custom",
+        "query": "super_admin,team_member,manager,representative",
+        "options": [
+          {
+            "text": "super_admin",
+            "value": "super_admin",
+            "selected": true
+          },
+          {
+            "text": "team_member",
+            "value": "team_member",
+            "selected": true
+          },
+          {
+            "text": "manager",
+            "value": "manager",
+            "selected": true
+          },
+          {
+            "text": "representative",
+            "value": "representative",
+            "selected": true
+          }
+        ],
+        "current": {
+          "text": [
+            "super_admin",
+            "team_member",
+            "manager",
+            "representative"
+          ],
+          "value": [
+            "super_admin",
+            "team_member",
+            "manager",
+            "representative"
+          ]
+        },
+        "multi": true,
+        "includeAll": false,
+        "description": "The four values of the role enum in backend/models/user.model.js. Counts at the time of writing: representative 2649, team_member 2642, manager 87, super_admin 6. Custom rather than a SELECT DISTINCT so the dropdown works before the datasource is live, and the enum cannot change without a migration anyway."
+      },
+      {
+        "name": "inactive_days",
+        "label": "Quiet for at least",
+        "type": "custom",
+        "query": "30,60,90,180,365",
+        "options": [
+          {
+            "text": "30",
+            "value": "30",
+            "selected": true
+          },
+          {
+            "text": "60",
+            "value": "60",
+            "selected": false
+          },
+          {
+            "text": "90",
+            "value": "90",
+            "selected": false
+          },
+          {
+            "text": "180",
+            "value": "180",
+            "selected": false
+          },
+          {
+            "text": "365",
+            "value": "365",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "30",
+          "value": "30"
+        },
+        "multi": false,
+        "includeAll": false,
+        "description": "Days since last login, as a threshold on the inactive-user table. Never-logged-in users are always included, whatever this is set to, since they have no last_login to compare."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}

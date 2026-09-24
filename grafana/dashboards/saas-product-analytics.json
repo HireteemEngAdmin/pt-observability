@@ -1,0 +1,3320 @@
+{
+  "uid": "pt-saas-analytics",
+  "title": "SaaS Product Analytics",
+  "description": "AGGREGATE product view of the Performance Tracker: active users, logins, feature usage, tenants and retention. Nothing on this dashboard identifies an individual, so it can be shared with anyone who needs product numbers. The named user lists live on 'SaaS Product Analytics: Users' (uid pt-saas-analytics-users), which is separate precisely so it can be permissioned separately: Grafana grants access per dashboard, not per panel. Sources: Prometheus for the saas_* metrics and the api job's HTTP histogram, PostgreSQL for retention and the per-company table, Loki for the event log. The saas_* metrics land with the backend branch feat/saas-product-metrics and the Postgres tunnel is not up yet, so both sets of panels are empty until then. Log lines carry PII and Loki retention is 30 days.",
+  "tags": [
+    "performance-tracker",
+    "observability",
+    "product",
+    "analytics"
+  ],
+  "links": [
+    {
+      "type": "link",
+      "title": "Named user lists (restricted)",
+      "url": "/d/pt-saas-analytics-users/",
+      "tooltip": "Most active users and inactive users, with names and email addresses. Separate dashboard so it can be permissioned separately.",
+      "icon": "external link",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "tags": []
+    },
+    {
+      "type": "link",
+      "title": "API and cron metrics",
+      "url": "/d/pt-api/",
+      "tooltip": "Infrastructure view of the same two processes.",
+      "icon": "external link",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "tags": []
+    }
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Daily active users",
+      "description": "Distinct users the backend counted as active in the 1d window, summed across tenants. Safe to sum: a user belongs to exactly one tenant, so the per-tenant distinct sets do not overlap. This is a gauge, so the panel reads it as-is: no rate(), and no adding up days. Expect ~1175 on a weekday and 60-160 at the weekend.",
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Weekly active users",
+      "description": "Distinct users active in the 7d window, as computed in the backend. It is NOT the sum of seven daily figures: that would count a user who logs in every day seven times.",
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"7d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Monthly active users",
+      "description": "Distinct users active in the 30d window, as computed in the backend. Same reasoning as WAU: a distinct count, not an accumulation.",
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"30d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Stickiness (DAU/MAU)",
+      "description": "DAU divided by MAU, as a percentage: of the users who showed up this month, the share who showed up today. Inherits the weekly cycle from its numerator, so a weekend reading is not comparable with a weekday one.",
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"}) / sum(saas_active_users{window=\"30d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Registered users",
+      "description": "Rows in the users table matching the role and status filters. A gauge of current state, not a signup rate: it says how many accounts exist, not how many were created in the selected range.",
+      "id": 6,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_users_total{environment=~\"$environment\", company_slug=~\"$company_slug\", role=~\"$user_role\", status=~\"$user_status\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Companies",
+      "description": "Tenant companies that exist. max() and not sum(): the gauge is exposed by both the api and cron processes reading the same database, so sum() would double it.",
+      "id": 7,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(saas_companies_total{environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Login success rate (range)",
+      "description": "Successful login attempts over all attempts, across the selected range. From increase() rather than the raw counters, because pm2 reload restarts the process and zeroes them, which would make the raw ratio mean \"since the last deploy\". or vector(0) keeps a range with no successes rendering as 0 instead of No data, which is indistinguishable from a broken scrape.",
+      "id": 8,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(saas_login_attempts_total{result=\"success\", environment=~\"$environment\"}[$__range])) or vector(0)) / sum(increase(saas_login_attempts_total{environment=~\"$environment\"}[$__range]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.97
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "API 5xx rate (range)",
+      "description": "Share of API requests answered with 5xx over the selected range. This one is not a saas_* metric: it comes from the http_request_duration_seconds histogram the api job has exposed since before this dashboard, so it has real history.",
+      "id": 9,
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(http_request_duration_seconds_count{job=\"api\", status_code=~\"5..\"}[$__range])) or vector(0)) / sum(increase(http_request_duration_seconds_count{job=\"api\"}[$__range]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "text",
+      "title": "Why there are no \"vs previous period\" deltas here",
+      "id": 10,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Grafana can put a delta on any of these tiles. None of them would be sound.\n\n- **The active-user tiles are gauges with a strong weekly cycle.** DAU swings from ~1175 on a weekday to 60-160 at the weekend. \"Down 92% on yesterday\" on a Saturday is arithmetic, not information, and a same-weekday comparison needs a fixed 7d offset the tiles do not have. The day-of-week split in **Active users** below is the honest version of the same question.\n- **The counters reset on deploy.** A delta between two raw counter readings that straddle a pm2 reload is negative and meaningless. The rate panels below use increase(), which handles the reset; a tile-level delta does not.\n- **Signup and churn deltas need row-level history.** saas_users_total is current state, with no created_at. That question is answered properly in **Retention** below, against Postgres, where the cohort is a real signup week rather than a subtraction between two gauge readings."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Active users",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 11,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily active users, by day of week",
+      "description": "The same DAU gauge, drawn in two colours by day of week. Without this split the series is one line that collapses every Saturday, and the first person to open the dashboard on a Sunday opens an incident. Measured: ~1175 unique users on a weekday against 60-160 at the weekend, so the weekend floor is roughly a tenth of the weekday level and is normal. day_of_week() is evaluated in UTC while the dashboard renders in browser time, so for a UTC-3 viewer the colour changes at 21:00 local rather than at midnight.",
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"}) and on() (day_of_week() >= 1 and day_of_week() <= 5)",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "weekday"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"}) and on() (day_of_week() == 0 or day_of_week() == 6)",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "weekend"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active users by window",
+      "description": "All three windows on one axis. The wide windows are nearly flat while the 1d window oscillates weekly, which is the same day-of-week story stated a second way. Three gauges plotted directly: no rate(), and the 7d line is the backend's own distinct count, not seven 1d values added together.",
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "1d (DAU)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"7d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "7d (WAU)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_users{window=\"30d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "C",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "30d (MAU)"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Stickiness (DAU/MAU)",
+      "description": "Ratio of the 1d to the 30d distinct count. Compare a weekday against other weekdays: the numerator carries the weekly cycle and the denominator does not, so the ratio dips every weekend by construction.",
+      "id": 14,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"}) / sum(saas_active_users{window=\"30d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "DAU/MAU"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily active users by company",
+      "description": "company_slug is the one tenant identifier that is safe as a Prometheus label: there are exactly two values, teem and reach, so it adds a factor of two to the series count rather than a factor of the user count. Present only on the aggregate gauges, which is why the counter panels are not broken down this way.",
+      "id": 15,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (company_slug) (saas_active_users{window=\"1d\", environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{company_slug}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active companies by window",
+      "description": "Tenants with at least one active user in each window. With two companies in total this is a small integer, so read it as a coverage check rather than a trend: 1 in the 1d window means one tenant was silent all day.",
+      "id": 16,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_companies{window=\"1d\", environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "1d"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_companies{window=\"7d\", environment=~\"$environment\"})",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "7d"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_companies{window=\"30d\", environment=~\"$environment\"})",
+          "refId": "C",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "30d"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Daily active users from action_logs, by day of week",
+      "description": "The measured DAU, from the activity rows themselves, with real history back to 2024-03-05 rather than starting whenever the saas_* metrics deploy. This is the panel to check the Prometheus gauge against once both exist. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Days are UTC days, because created_at is timestamptz and the session runs at the server's UTC, while the dashboard renders in browser time: for a UTC-3 viewer a bar covers 21:00 the previous evening to 21:00. Bounded by the dashboard time range. action_logs is 2.1M rows and 309 MB and its only created_at indexes are partial (method IN ('ACTIVATED','DEACTIVATED')), so this is a filtered scan: widening the range costs real time. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 17,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('day', a.created_at)                     AS time,\n       nullif(count(DISTINCT a.user_id)\n              FILTER (WHERE extract(isodow FROM a.created_at) <= 5), 0) AS weekday,\n       nullif(count(DISTINCT a.user_id)\n              FILTER (WHERE extract(isodow FROM a.created_at) >= 6), 0) AS weekend\n  FROM action_logs a\n  JOIN \"Users\" u ON u.id = a.user_id\n WHERE $__timeFilter(a.created_at)\n   AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n GROUP BY 1\n ORDER BY 1",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Logins and authentication",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 18,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Login attempts per minute, by result",
+      "description": "rate() over a 5m window, scaled to a per-minute figure. Never the raw counter: pm2 reload zeroes it, so a raw reading is a per-deploy total masquerading as a cumulative one. result is success or failure.",
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (result) (rate(saas_login_attempts_total{environment=~\"$environment\", result=~\"$result\"}[5m])) * 60",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Login success rate",
+      "description": "Successes over all attempts, both as rates so counter resets are handled. or vector(0) makes a clean window render as 0 rather than No data. At low traffic this is jumpy by construction: at three attempts in five minutes the series can only take the values 0, 1/3, 2/3 and 1.",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(rate(saas_login_attempts_total{result=\"success\", environment=~\"$environment\"}[5m])) or vector(0)) / sum(rate(saas_login_attempts_total{environment=~\"$environment\"}[5m]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "success rate"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Login failures by reason",
+      "description": "Stacked, so the total failure rate and its composition read off the same panel. The reason set is closed and comes from the login path in backend/services/auth.services.js: user_not_found (no such email; there is no auto-provisioning), bad_password (a returning user's bcrypt compare failed), firebase_rejected (an imported user's first login, rejected by Firebase), no_firebase_config (an imported user's first login at a company with Firebase auth disabled, so there is nothing to fall back to), deactivated (past the deactivation grace period). user_not_found rising on its own is credential stuffing; bad_password rising on its own is more often a broken client or a password-reset regression.",
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (rate(saas_login_attempts_total{result=\"failure\", environment=~\"$environment\"}[5m])) * 60",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Failure reasons over the range",
+      "description": "Failure counts by reason over the dashboard's time range, from increase() so deploys inside the range do not truncate the total. Instant rather than range: a top-N re-evaluated at every step renders as hundreds of slivers.",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "label_replace(topk(10, sum by (reason) (increase(saas_login_attempts_total{result=\"failure\", environment=~\"$environment\"}[$__range]))), \"reason\", \"(no reason label)\", \"reason\", \"^$\")",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "namePlacement": "left",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Authentication events",
+      "description": "Auth log lines: selector, then a regex line filter over the raw bytes, then | json. The parser is the expensive stage and runs last, on the lines that survived. Verified against live data: this returns real lines today (module=auth with operation login, resetPassword, verifyMagicLink, generate and verify). Only info, warn and error are ever here, because production runs at level info; the Firebase rejection path logs at debug, so a firebase_rejected failure appears in the metric panels above with no matching line here. The Auth method filter binds to this panel and nothing else, and only its firebase value narrows anything: see the variable's own description.",
+      "id": 23,
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=~\"$loki_job\"} |~ `\"module\":\"auth\"|\"(event|operation)\":\"[^\"]*(login|auth|password|magic)` | json | __error__=\"\" | environment=~\"$environment\" | level=~\"$level\" | event=~\"$event\" | feature=~\"$feature\" | result=~\"$result\" | userRole=~\"$user_role\" | companyId=~\"$company_id\" | userId=~\"$user_id\" | provider=~\"$auth_method\"",
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    },
+    {
+      "type": "row",
+      "title": "Feature usage",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "id": 24,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Feature events per minute, by feature",
+      "description": "Events, not users. One user hitting a feature forty times in a session is forty here. Read it as load and as a relative ranking between features, never as reach.",
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 62
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (feature) (rate(saas_feature_usage_total{environment=~\"$environment\", feature=~\"$feature\", user_role=~\"$user_role\"}[5m])) * 60",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{feature}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Top features over the range",
+      "description": "Event totals per feature across the range, from increase(). Same caveat: these are event counts. A feature used constantly by three people outranks one used once by three hundred.",
+      "id": 26,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 62
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(15, sum by (feature) (increase(saas_feature_usage_total{environment=~\"$environment\", feature=~\"$feature\", user_role=~\"$user_role\"}[$__range])))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "namePlacement": "left",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "sizing": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "continuous-BlPu"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Feature events per minute, by role",
+      "description": "The four roles are super_admin, team_member, manager and representative (the enum in backend/models/user.model.js). Note the label is user_role on this counter and role on saas_users_total; the Role filter binds to both.",
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 70
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (user_role) (rate(saas_feature_usage_total{environment=~\"$environment\", feature=~\"$feature\", user_role=~\"$user_role\"}[5m])) * 60",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{user_role}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "text",
+      "title": "Adoption rate is deliberately not a panel here",
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 70
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Adoption** is *unique users who used a feature* over *eligible active users* - eligible, not all, because several features are role-scoped and dividing by the whole user base understates them by whatever share of users could never reach the feature.\n\nNeither term is available:\n\n- **The numerator needs unique users per feature.** saas_feature_usage_total is a counter of events. Deriving distinct users from it is impossible in principle, and adding a user id label to make it possible would multiply the series count by the user count.\n- **The denominator needs role eligibility per feature.** That mapping lives in the application's authorisation rules, not in any metric.\n\nThe panels to the left are therefore labelled *events*, and no ratio is derived from them. A unique-user numerator is computable in Postgres from the feature usage rows; see the blocked rows below."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Companies and tenants",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 29,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Companies",
+      "description": "Tenant companies in the database. max() deduplicates the api and cron copies of the same gauge.",
+      "id": 30,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(saas_companies_total{environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Active companies (30d)",
+      "description": "Companies with at least one user active in the 30d window.",
+      "id": 31,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_active_companies{window=\"30d\", environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": null,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Company activation (30d)",
+      "description": "Share of tenants with any activity in 30 days. With two companies this is 0, 50 or 100 and nothing else, so treat it as a flag rather than a trend.",
+      "id": 32,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(saas_active_companies{window=\"30d\", environment=~\"$environment\"}) / max(saas_companies_total{environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Users per company (mean)",
+      "description": "Arithmetic mean, and with two tenants of very different size the mean is not near either of them. The per-company breakdown below is the number to actually read.",
+      "id": 33,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(saas_users_total{environment=~\"$environment\"}) / max(saas_companies_total{environment=~\"$environment\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Registered users by company",
+      "description": "Account counts per tenant, filtered by role and status. Safe on Prometheus because company_slug has two values; this is the only tenant dimension that goes into a metric query anywhere on this dashboard.",
+      "id": 34,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 83
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (company_slug) (saas_users_total{environment=~\"$environment\", company_slug=~\"$company_slug\", role=~\"$user_role\", status=~\"$user_status\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{company_slug}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Monthly engagement by company",
+      "description": "Share of each tenant's accounts that were active in the 30d window. This is the one per-tenant ratio the aggregate gauges can support honestly, because both operands carry company_slug and both are distinct counts. Note the denominator here is every account including never-activated ones, so a tenant mid-onboarding reads low for reasons that are not churn - splitting those apart needs the blocked table below.",
+      "id": 35,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 83
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum by (company_slug) (saas_active_users{window=\"30d\", environment=~\"$environment\", company_slug=~\"$company_slug\"}) / sum by (company_slug) (saas_users_total{environment=~\"$environment\", company_slug=~\"$company_slug\"})",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{company_slug}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Per-company detail",
+      "description": "One row per tenant company. Only 'active in range' depends on the dashboard's time range; every other column is current state, which is why the row counts do not move when the range does. Users with no TenantId are absent by construction, because the join runs through \"Tenants\" and they belong to no company: in practice that is the super_admins, so these counts sum to slightly less than the whole user base and are not meant to match Registered users above. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Seats sold is not a column here and cannot be: there is no plan or seat field anywhere in performance-tracker backend/models/, so 'seats used against seats bought' has no second term. See the Plan variable's description. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 36,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 91
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "WITH active AS (\n  SELECT DISTINCT a.user_id\n    FROM action_logs a\n   WHERE $__timeFilter(a.created_at)\n)\nSELECT c.name                                                        AS company,\n       c.slug,\n       count(DISTINCT t.id)                                          AS tenants,\n       count(DISTINCT u.id)                                          AS users,\n       count(DISTINCT u.id) FILTER (WHERE act.user_id IS NOT NULL)    AS \"active in range\",\n       count(DISTINCT u.id) FILTER (WHERE u.role = 'team_member')     AS team_members,\n       count(DISTINCT u.id) FILTER (WHERE u.role = 'manager')         AS managers,\n       count(DISTINCT u.id) FILTER (WHERE u.role = 'representative')  AS representatives,\n       count(DISTINCT u.id) FILTER (WHERE u.role = 'super_admin')     AS super_admins,\n       count(DISTINCT u.id) FILTER (WHERE u.last_login IS NULL)       AS \"never logged in\",\n       count(DISTINCT u.id) FILTER (WHERE u.deactivated_at IS NOT NULL) AS deactivated\n  FROM companies c\n  JOIN \"Tenants\" t   ON t.\"CompanyId\" = c.id\n  JOIN \"Users\"   u   ON u.\"TenantId\"  = t.id\n  LEFT JOIN active act ON act.user_id = u.id\n WHERE u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n GROUP BY c.name, c.slug\n ORDER BY users DESC",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Most active users (aggregate)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "id": 37,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Activity concentration",
+      "description": "How concentrated activity is, without naming anyone. Read the last two columns together: if the 500+ bucket is 2% of users and 60% of actions, the product has a small number of power users and a long tail, and an average-actions-per-user figure would describe neither group. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Bounded by the dashboard time range. action_logs is 2.1M rows and 309 MB and its only created_at indexes are partial (method IN ('ACTIVATED','DEACTIVATED')), so this is a filtered scan: widening the range costs real time. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 38,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "WITH per_user AS (\n  SELECT a.user_id, count(*) AS actions\n    FROM action_logs a\n    JOIN \"Users\" u ON u.id = a.user_id\n   WHERE $__timeFilter(a.created_at)\n     AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n   GROUP BY a.user_id\n)\nSELECT CASE WHEN actions = 1           THEN '1'\n            WHEN actions <= 5          THEN '2-5'\n            WHEN actions <= 20         THEN '6-20'\n            WHEN actions <= 100        THEN '21-100'\n            WHEN actions <= 500        THEN '101-500'\n            ELSE                            '500+'\n       END                                              AS \"actions in range\",\n       count(*)                                         AS users,\n       round(100.0 * count(*) / sum(count(*)) OVER (), 1) AS \"% of active users\",\n       sum(actions)                                     AS actions,\n       round(100.0 * sum(actions) / sum(sum(actions)) OVER (), 1) AS \"% of all actions\"\n  FROM per_user\n GROUP BY 1\n ORDER BY min(actions)",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "text",
+      "title": "The per-user leaderboard is on the restricted dashboard",
+      "id": 39,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 101
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "The named leaderboard - name, email, company, role, actions, logins, distinct active days, last seen - is on **SaaS Product Analytics: Users** (`/d/pt-saas-analytics-users`), reachable from the dashboard links at the top of this page.\n\n**Why it is not here.** That table carries email addresses and full names. Grafana grants access per dashboard, not per panel, so a single dashboard mixing aggregate and identifiable panels can only be permissioned as though all of it were identifiable. Splitting them means this dashboard can be shared with anyone who needs product numbers, and the user list can be restricted to the people who need to act on individuals.\n\n**It is not blocked and not approximated.** The query exists and runs against `action_logs` joined to `\"Users\"`; it is simply behind a different permission."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Inactive users (aggregate)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 110
+      },
+      "id": 40,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Inactive user counts",
+      "description": "The size of each inactive population, from Users.last_login. Never-logged-in and gone-quiet are separated because they are different problems wearing the same symptom: the first is an onboarding failure, the second is a churn signal. The deactivated column matters for the same reason - a deactivated user is not a churn signal, they were switched off deliberately. Measured at the time of writing: 2156 of 5384 users have never logged in and 1381 are deactivated. This query reads last_login rather than action_logs, so it needs no time bound and no scan. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 41,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 111
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN u.last_login IS NULL                            THEN 'never logged in'\n            WHEN u.last_login <  now() - interval '90 days'        THEN 'quiet 90+ days'\n            WHEN u.last_login <  now() - interval '60 days'        THEN 'quiet 60-90 days'\n            WHEN u.last_login <  now() - interval '30 days'        THEN 'quiet 30-60 days'\n            ELSE                                                       'active within 30 days'\n       END                                                  AS status,\n       count(*)                                             AS users,\n       count(*) FILTER (WHERE u.deactivated_at IS NOT NULL)  AS \"of which deactivated\",\n       round(100.0 * count(*) / sum(count(*)) OVER (), 1)    AS \"% of all users\"\n  FROM \"Users\" u\n  WHERE u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n GROUP BY 1\n ORDER BY 2 DESC",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "text",
+      "title": "The named inactive-user list is on the restricted dashboard",
+      "id": 42,
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 111
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "The list itself - name, email, company, role, signup date, last login, days quiet - is on **SaaS Product Analytics: Users** (`/d/pt-saas-analytics-users`), linked at the top of this page.\n\n**Why it is split.** The counts on the left answer \"how big is the problem\". The list answers \"who do I email\", and that is a column of email addresses. Grafana permissions a dashboard, not a panel, so the two live apart and only the second one needs restricting.\n\n**A caveat that applies to both.** `last_login` is maintained by the login path, so a user who is quiet by this measure has genuinely not logged in. But the reverse is weaker: because successful reads are recorded nowhere, someone who logs in and only reads leaves a fresh `last_login` and no `action_logs` rows, so they count as active here and as inactive in the action-based panels. The two definitions disagree by design, and this is where that shows."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Retention",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 120
+      },
+      "id": 43,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Retention by signup cohort",
+      "description": "Rolling retention by signup month: of the users who signed up in a month, the share with any activity at least N days after their own signup timestamp. Each user is measured from their own signup, not from the start of the month, so someone who joined on the 28th is not penalised. Because the condition is \"at least N days later\", the columns fall monotonically and a user active at d90 is counted at d7 and d30 too. **Read the age column before the percentages:** a cohort whose youngest member is under 90 days old cannot yet have reached d90, so its d90 reads low for arithmetic reasons and not because those users churned. The column reports the youngest member rather than the age of the month bucket, so a value at or above the window is a guarantee for every row in the cohort and not just for its oldest. The bottom rows are the trustworthy ones. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Note the consequence: a user who signs up, logs in, reads, and never mutates anything counts as retained only through the login rows. Bounded by the dashboard time range. action_logs is 2.1M rows and 309 MB and its only created_at indexes are partial (method IN ('ACTIVATED','DEACTIVATED')), so this is a filtered scan: widening the range costs real time. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 44,
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 121
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "WITH cohort AS (\n  SELECT u.id                                      AS user_id,\n         date_trunc('month', u.\"createdAt\")        AS cohort_month,\n         u.\"createdAt\"                             AS signed_up\n    FROM \"Users\" u\n   WHERE $__timeFilter(u.\"createdAt\")\n     AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n),\nlast_seen AS (\n  SELECT c.user_id,\n         c.cohort_month,\n         c.signed_up,\n         max(a.created_at) AS last_action\n    FROM cohort c\n    LEFT JOIN action_logs a\n           ON a.user_id = c.user_id\n          AND a.created_at >= c.signed_up\n          AND a.created_at <  now()\n   GROUP BY 1, 2, 3\n)\nSELECT to_char(cohort_month, 'YYYY-MM')                                AS cohort,\n       count(*)                                                        AS \"signed up\",\n       count(*) FILTER (WHERE last_action IS NOT NULL)                  AS \"ever active\",\n       round(100.0 * count(*) FILTER (\n             WHERE last_action >= signed_up + interval  '7 days') / count(*), 1) AS \"d7 %\",\n       round(100.0 * count(*) FILTER (\n             WHERE last_action >= signed_up + interval '30 days') / count(*), 1) AS \"d30 %\",\n       round(100.0 * count(*) FILTER (\n             WHERE last_action >= signed_up + interval '90 days') / count(*), 1) AS \"d90 %\",\n       -- The age of the cohort's YOUNGEST member, from max(signed_up), not the age of\n       -- the month bucket. Measuring from the month start would report the oldest\n       -- possible age and so overstate how mature the cohort is: a bucket 95 days old\n       -- can hold a member who joined 65 days ago and cannot have reached d90. This\n       -- way the column is the conservative bound, and a value >= 90 means the d90\n       -- column is trustworthy for every row in the cohort.\n       (now()::date - max(signed_up)::date)                             AS \"youngest member age days\"\n  FROM last_seen\n GROUP BY cohort_month\n ORDER BY cohort_month DESC",
+          "format": "table",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Weekly active users, split into new / retained / resurrected",
+      "description": "Every active user each week, classified: new signed up that week, retained were also active the week before, resurrected came back after at least one week away. Stacked, so the total is WAU and the composition is visible in the same panel - a flat total made of a rising 'resurrected' and a falling 'retained' is a retention problem hidden behind a healthy headline. 'new' is a real signup week from Users.createdAt, not merely first-seen inside the selected range, so narrowing the range does not manufacture new users. The first week shown always understates 'retained', because its previous week is outside the range and the lookup finds nothing. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Bounded by the dashboard time range. action_logs is 2.1M rows and 309 MB and its only created_at indexes are partial (method IN ('ACTIVATED','DEACTIVATED')), so this is a filtered scan: widening the range costs real time. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 45,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 131
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "WITH act AS (\n  SELECT DISTINCT a.user_id,\n         date_trunc('week', a.created_at) AS wk\n    FROM action_logs a\n    JOIN \"Users\" u ON u.id = a.user_id\n   WHERE $__timeFilter(a.created_at)\n     AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n),\nsignup AS (\n  SELECT u.id AS user_id, date_trunc('week', u.\"createdAt\") AS signup_wk\n    FROM \"Users\" u\n   WHERE u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n)\nSELECT a.wk                                                                AS time,\n       count(*) FILTER (WHERE s.signup_wk = a.wk)                           AS new,\n       count(*) FILTER (WHERE s.signup_wk <> a.wk\n                          AND p.user_id IS NOT NULL)                        AS retained,\n       count(*) FILTER (WHERE s.signup_wk <> a.wk\n                          AND p.user_id IS NULL)                            AS resurrected\n  FROM act a\n  JOIN signup s ON s.user_id = a.user_id\n  LEFT JOIN act p ON p.user_id = a.user_id\n                 AND p.wk     = a.wk - interval '1 week'\n GROUP BY a.wk\n ORDER BY a.wk",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Sessions and engagement (session duration blocked)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 140
+      },
+      "id": 46,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Actions per active user per day",
+      "description": "Engagement depth per active day, over users who were active that day. The mean, median and p90 are all here because they disagree: with a skewed distribution the mean sits above the median and describes nobody, and quoting it alone is the usual way this number misleads. Needs no session concept, so unlike session duration it is computable today. \"Active\" means logged in (action_logs.route = '/login') or performed an authenticated POST/PATCH/PUT/DELETE. Successful reads are recorded nowhere, so a user who only reads never appears here. Bounded by the dashboard time range. action_logs is 2.1M rows and 309 MB and its only created_at indexes are partial (method IN ('ACTIVATED','DEACTIVATED')), so this is a filtered scan: widening the range costs real time. Not yet executed. This query has been written and reviewed but never run: the PostgreSQL datasource is provisioned (uid `postgres`) and the tunnel it needs (`grafana-pg-tunnel.service`) is not up yet, so 172.17.0.1:5432 is closed. Column and table names come from the Sequelize models in performance-tracker `backend/models/`, not from the server. Expect to correct something the first time it runs.",
+      "id": 47,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 141
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "rawSql": "WITH per_user_day AS (\n  SELECT a.user_id,\n         date_trunc('day', a.created_at) AS d,\n         count(*)                        AS actions\n    FROM action_logs a\n    JOIN \"Users\" u ON u.id = a.user_id\n   WHERE $__timeFilter(a.created_at)\n     AND u.email NOT LIKE 'mocktm_%'\n     AND u.email NOT LIKE '%demo%'\n   GROUP BY 1, 2\n)\nSELECT d                                                          AS time,\n       round(avg(actions), 2)                                     AS \"mean actions/user\",\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY actions)        AS \"median actions/user\",\n       percentile_cont(0.9) WITHIN GROUP (ORDER BY actions)        AS \"p90 actions/user\"\n  FROM per_user_day\n GROUP BY d\n ORDER BY d",
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "text",
+      "title": "Session duration cannot be computed, and this is not a datasource problem",
+      "id": 48,
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 141
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**What is missing:** sessions per user, median and p90 session duration, actions per session, time-to-first-action after login.\n\n**Why the Postgres datasource does not unblock it.** A duration needs a start and an end. Only the start is recorded:\n\n- **There is no session table.** Nothing persists a session row to close, so there is nothing to read.\n- **There is no logout event.** Clients drop the token and the backend is never told, so no end timestamp is ever written anywhere.\n- **JWT expiry must not be substituted.** It is a fixed constant from the signing config, so every session would come out exactly that long. The chart would be a restatement of a configuration value, and it would be read and quoted as a measurement of user behaviour.\n\n**What it needs, in order.** First an application change, and it is a product decision before it is an engineering one: either emit a session lifecycle event, or agree a definition by inactivity timeout (for instance, 30 minutes with no request closes the session) and sessionise `action_logs` against it. Someone has to decide what a session *is* before any number is trustworthy. Only then is it a query.\n\n**Available without that decision:** the panel to the left, and time-to-first-action, which is a login row and the next action row for the same user - a plain window function over `action_logs`, needing no new instrumentation. It is not here yet because no query on this dashboard has been executed against the database at all."
+      },
+      "transparent": false
+    },
+    {
+      "type": "row",
+      "title": "Product health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 151
+      },
+      "id": 49,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests per second, by route",
+      "description": "Top 15 mounted routes by request rate. Concrete URLs never become labels - the route label is the Express mount path, so /api/tasks/:id is one series and not one per task. There are 137 route values in Prometheus today, hence the topk.",
+      "id": 50,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 152
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (route) (topk(15, rate(http_request_duration_seconds_count{job=\"api\"}[5m])))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50 / p95 / p99",
+      "description": "Percentiles interpolated over the histogram buckets, all routes combined. The top bucket is 10s, so anything slower is reported as 10s rather than as its real value.",
+      "id": 51,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 152
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"api\"}[5m])))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"api\"}[5m])))",
+          "refId": "B",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"api\"}[5m])))",
+          "refId": "C",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "p99"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx rate",
+      "description": "Share of requests answered with 5xx. or vector(0) so a healthy window renders as zero rather than as No data, which would look identical to a dead scrape.",
+      "id": 52,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 160
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(rate(http_request_duration_seconds_count{job=\"api\", status_code=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_request_duration_seconds_count{job=\"api\"}[5m]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "5xx"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests per second, by status",
+      "description": "4xx climbing before 5xx does is the usual shape of a client or auth regression, which is why this is next to the 5xx panel rather than folded into it.",
+      "id": 53,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 160
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status_code) (rate(http_request_duration_seconds_count{job=\"api\"}[5m]))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{status_code}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Auth endpoint latency p95",
+      "description": "p95 per auth route. Slow here is felt as \"the product is broken\" even when everything else is fine, and the login path does synchronous work on the way through (a HubSpot sync on login), so it is worth its own panel.",
+      "id": 54,
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 160
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{job=\"api\", route=~\"/api/auth/.*\"}[5m])))",
+          "refId": "A",
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 167
+      },
+      "id": 55,
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Product event volume by event",
+      "description": "Structured product events per interval. The `\"event\":\"` line filter runs before the parser and cuts the volume by roughly the ratio of product events to all logging, so | json only ever sees the candidate lines. Empty until the backend emits an `event` field - verified against the live stack, where this query parses and returns zero series today.",
+      "id": 56,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 168
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (event) (count_over_time({job=~\"$loki_job\"} |= `\"event\":\"` | json | __error__=\"\" | environment=~\"$environment\" | level=~\"$level\" | event=~\"$event\" | feature=~\"$feature\" | result=~\"$result\" | userRole=~\"$user_role\" | companyId=~\"$company_id\" | userId=~\"$user_id\" [$__interval]))",
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "description": "Volume by level, read from the level field rather than from which stream the line arrived on: pino writes every level to stdout, so stderr carries no application errors. There is no debug bar and there never will be in production - backend/utils/logger.js pins the level to info there. Measured over one hour on the live stack: 3327 info, 581 warn, 28 error, 0 debug. Successful request traces are logged at debug and so are absent from Loki entirely.",
+      "id": 57,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 168
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (level) (count_over_time({job=~\"$loki_job\"} |= `\"service\":\"performance-tracker\"` | json | __error__=\"\" | level=~\"$level\" [$__interval]))",
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": null,
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Product events",
+      "description": "The structured stream behind the panels above, filtered by the variable bar. Company and user filtering happens here and only here: companyId and userId are body fields reachable after | json, never stream labels, and they are the two identifiers that must not become Prometheus labels. Both the api process (Loki job `server`, since Alloy names streams after the PM2 process) and the cron process (job `cron`) are in scope - Prometheus calls the same processes `api` and `cron`, so the Process filter here is Loki's naming, not Prometheus's. Expand a line for requestId and correlationId to follow one request across services.",
+      "id": 58,
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 176
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=~\"$loki_job\"} |= `\"service\":\"performance-tracker\"` | json | __error__=\"\" | environment=~\"$environment\" | level=~\"$level\" | event=~\"$event\" | feature=~\"$feature\" | result=~\"$result\" | userRole=~\"$user_role\" | companyId=~\"$company_id\" | userId=~\"$user_id\"",
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(saas_users_total, environment)",
+          "refId": "A"
+        },
+        "description": "Prometheus label on every saas_* metric, and a pino field on every log line, so this one filter reaches both datasources.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "company_slug",
+        "label": "Company (metrics)",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(saas_users_total, company_slug)",
+          "refId": "A"
+        },
+        "description": "The only tenant identifier safe to put in a Prometheus query: two values, teem and reach. It is present on the aggregate gauges only, so selecting one company narrows the user and active-user panels and leaves the login and feature counters unnarrowed - those have no company_slug label.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "company_id",
+        "label": "Company ID (logs)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "Tenant UUID, applied to the Loki panels only. Never reaches a Prometheus query: a company id as a metric label would be a cardinality decision, and the aggregate metrics are not scoped this way on purpose."
+      },
+      {
+        "name": "user_id",
+        "label": "User ID (logs)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "User UUID, applied to the Loki panels only. A user id must never appear in a Prometheus query - at ~1175 daily active users it turns one counter into thousands of series."
+      },
+      {
+        "name": "plan",
+        "label": "Plan (inert)",
+        "type": "custom",
+        "query": "no plan field exists",
+        "options": [
+          {
+            "text": "no plan field exists",
+            "value": "no plan field exists",
+            "selected": true
+          }
+        ],
+        "current": {
+          "text": "no plan field exists",
+          "value": "no plan field exists"
+        },
+        "description": "Wired to nothing, and honestly labelled. The datasource is no longer the obstacle - the obstacle is that there is no plan column to query. backend/models/company.model.js has id, name, slug, mandatory_journey_days and a config JSONB, and no model in backend/models/ carries a plan or tier field. The Grafana role can read companies, so the moment the column exists this becomes a one-line query variable. Until then it narrows nothing, and it is wired to no query rather than wired to a guess."
+      },
+      {
+        "name": "user_role",
+        "label": "User role",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(saas_users_total, role)",
+          "refId": "A"
+        },
+        "description": "One variable, two label names: `role` on saas_users_total and `user_role` on saas_feature_usage_total. Values come from the enum in backend/models/user.model.js: super_admin, team_member, manager, representative.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "user_status",
+        "label": "User status",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(saas_users_total, status)",
+          "refId": "A"
+        },
+        "description": "Account status from saas_users_total. Reaches the registered-user panels only: the activity gauges are not broken down by status.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "feature",
+        "label": "Feature",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(saas_feature_usage_total, feature)",
+          "refId": "A"
+        },
+        "description": "Feature label on saas_feature_usage_total, and the `feature` field on the log lines.",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "result",
+        "label": "Result",
+        "type": "custom",
+        "query": "success,failure",
+        "options": [
+          {
+            "text": "success",
+            "value": "success",
+            "selected": false
+          },
+          {
+            "text": "failure",
+            "value": "failure",
+            "selected": false
+          }
+        ],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "description": "result label on saas_login_attempts_total, and the `result` field on the log lines."
+      },
+      {
+        "name": "auth_method",
+        "label": "Auth method (logs)",
+        "type": "custom",
+        "query": "firebase",
+        "options": [
+          {
+            "text": "firebase",
+            "value": "firebase",
+            "selected": false
+          }
+        ],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "description": "Loki-only, on the logger's `provider` field, and firebase is the only value that exists. Local bcrypt and magic-link logins set no auth-method field at all, so they cannot be filtered here - they are visible in the panel, distinguishable by `operation`, but not selectable. Even firebase is sparse: measured on the live stack, zero of 2.19 million lines over 7 days carry a `provider` field, because it is only written on an imported user's first login and the rejection case is logged at debug, which production never emits. Filtering the metric panels by auth method is not possible either: saas_login_attempts_total has no auth_method label. The nearest signal there is the reason breakdown, where firebase_rejected and no_firebase_config are Firebase-specific and bad_password is local."
+      },
+      {
+        "name": "event",
+        "label": "Event type (logs)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "Regex against the `event` field. A textbox and not a dropdown because `event` is a JSON body field and Loki's label_values only enumerates stream labels, so there is nothing to populate a list from without querying every line."
+      },
+      {
+        "name": "level",
+        "label": "Log level",
+        "type": "custom",
+        "query": "error,warn,info",
+        "options": [
+          {
+            "text": "error",
+            "value": "error",
+            "selected": false
+          },
+          {
+            "text": "warn",
+            "value": "warn",
+            "selected": false
+          },
+          {
+            "text": "info",
+            "value": "info",
+            "selected": false
+          }
+        ],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "description": "No debug option, because production never emits it: backend/utils/logger.js pins the level to info outside development. Product events are logged at info, so All is the useful default here rather than error and warn."
+      },
+      {
+        "name": "loki_job",
+        "label": "Process (logs)",
+        "type": "custom",
+        "query": "server,cron",
+        "options": [
+          {
+            "text": "server",
+            "value": "server",
+            "selected": false
+          },
+          {
+            "text": "cron",
+            "value": "cron",
+            "selected": false
+          }
+        ],
+        "multi": true,
+        "includeAll": true,
+        "allValue": "server|cron",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "description": "Loki's job names, which differ from Prometheus's for the same processes: `server` here is the api job there. allValue is server|cron rather than .* so the leftover ac/pos/smoke test streams stay out of the log panels."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  }
+}
